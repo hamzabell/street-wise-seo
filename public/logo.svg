@@ -1,0 +1,30 @@
+<svg width="180" height="40" viewBox="0 0 180 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background street/road element -->
+  <rect x="2" y="8" width="36" height="24" rx="4" fill="#ea580c" opacity="0.1"/>
+  <rect x="2" y="8" width="36" height="24" rx="4" stroke="#ea580c" stroke-width="2"/>
+
+  <!-- Street lane lines -->
+  <line x1="2" y1="20" x2="38" y2="20" stroke="#ea580c" stroke-width="1" stroke-dasharray="4,2" opacity="0.6"/>
+
+  <!-- Letter S styled like a street curve -->
+  <path d="M12 14 Q12 11 15 11 Q18 11 18 14 Q18 17 15 17 Q12 17 12 20 Q12 23 15 23 Q18 23 18 26"
+        stroke="#ea580c" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+
+  <!-- Letter W made of connected street lines -->
+  <path d="M22 16 L24 26 L26 18 L28 26 L30 16"
+        stroke="#ea580c" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- StreetWise text -->
+  <text x="42" y="25" font-family="Inter, system-ui, sans-serif" font-size="16" font-weight="700" fill="#1f2937">StreetWise</text>
+
+  <!-- SEO text with highlight -->
+  <rect x="108" y="18" width="32" height="10" rx="2" fill="#ea580c" opacity="0.15"/>
+  <text x="108" y="25" font-family="Inter, system-ui, sans-serif" font-size="16" font-weight="800" fill="#ea580c">SEO</text>
+
+  <!-- Small street smart icon -->
+  <circle cx="148" cy="20" r="3" fill="none" stroke="#ea580c" stroke-width="1.5"/>
+  <path d="M146 20 L150 20 M148 18 L148 22" stroke="#ea580c" stroke-width="1.5" stroke-linecap="round"/>
+
+  <!-- Tagline -->
+  <text x="42" y="34" font-family="Inter, system-ui, sans-serif" font-size="7" font-weight="500" fill="#6b7280" letter-spacing="0.5">LOCAL SEARCH INTELLIGENCE</text>
+</svg>

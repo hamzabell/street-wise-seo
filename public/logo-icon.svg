@@ -1,0 +1,19 @@
+<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background street/road element -->
+  <rect x="4" y="10" width="32" height="20" rx="4" fill="#ea580c" opacity="0.1"/>
+  <rect x="4" y="10" width="32" height="20" rx="4" stroke="#ea580c" stroke-width="2"/>
+
+  <!-- Street lane lines -->
+  <line x1="4" y1="20" x2="36" y2="20" stroke="#ea580c" stroke-width="1" stroke-dasharray="4,2" opacity="0.6"/>
+
+  <!-- Letter S styled like a street curve -->
+  <path d="M11 15 Q11 12 14 12 Q17 12 17 15 Q17 18 14 18 Q11 18 11 21 Q11 24 14 24 Q17 24 17 27"
+        stroke="#ea580c" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+
+  <!-- Letter W made of connected street lines -->
+  <path d="M21 17 L23 27 L25 19 L27 27 L29 17"
+        stroke="#ea580c" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Small SEO text -->
+  <text x="8" y="35" font-family="Inter, system-ui, sans-serif" font-size="8" font-weight="800" fill="#ea580c">SEO</text>
+</svg>
