@@ -409,19 +409,21 @@ export class PredictiveContentEngine {
 
     let alignment = 50;
 
-    // Check topic alignment
-    const topicMatch = personalizationInsights.preferredTopics.find(pref =>
-      pref.topic.toLowerCase().includes(trend.trend.toLowerCase()) ||
-      trend.trend.toLowerCase().includes(pref.topic.toLowerCase())
+    // Check topic alignment - access through userProfile.preferredTopics
+    const topicMatch = Object.entries(personalizationInsights.userProfile.preferredTopics).find(([topicName, pref]) =>
+      pref.avgScore > 70 && (
+        topicName.toLowerCase().includes(trend.trend.toLowerCase()) ||
+        trend.trend.toLowerCase().includes(topicName.toLowerCase())
+      )
     );
 
     if (topicMatch) {
-      alignment += topicMatch.relevanceScore * 0.3;
+      alignment += topicMatch[1].successRate * 30;
     }
 
-    // Check content type alignment
-    const contentTypeMatch = personalizationInsights.optimalContentTypes.find(type =>
-      type.effectiveness > 0.7
+    // Check content type alignment - access through contentRecommendations.optimalContentTypes
+    const contentTypeMatch = personalizationInsights.contentRecommendations.optimalContentTypes.find(type =>
+      type.confidence > 0.7
     );
 
     if (contentTypeMatch) {

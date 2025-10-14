@@ -718,7 +718,7 @@ export class CustomerSegmentPersonalizer {
       location: request.businessContext.location,
       productsOrServices: request.businessContext.productsOrServices,
       businessGoals: request.businessContext.businessGoals,
-      analysisDepth: request.analysisOptions.segmentationDepth === 'deep' ? 'comprehensive' : 'basic'
+      analysisDepth: (request.analysisOptions.segmentationDepth === 'deep' ? 'comprehensive' : 'basic') as 'basic' | 'comprehensive' | 'deep'
     };
 
     return await this.journeyMapper.analyzeCustomerJourney(journeyRequest);

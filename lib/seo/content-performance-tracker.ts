@@ -84,7 +84,7 @@ export interface UserPreferenceProfile {
   preferredTopics: Record<string, {
     count: number;
     avgScore: number;
-    conversionRate: number;
+    successRate: number;
   }>;
 
   preferredTones: Record<string, {
@@ -1103,14 +1103,14 @@ export class ContentPerformanceTracker {
       profile.preferredTopics[topicCategory] = {
         count: 0,
         avgScore: 0,
-        conversionRate: 0
+        successRate: 0
       };
     }
 
     const pref = profile.preferredTopics[topicCategory];
     pref.count++;
     pref.avgScore = (pref.avgScore * (pref.count - 1) + content.overallScore) / pref.count;
-    pref.conversionRate = (pref.conversionRate * (pref.count - 1) + (content.trafficPotential / 100)) / pref.count;
+    pref.successRate = (pref.successRate * (pref.count - 1) + (content.overallScore > 70 ? 1 : 0)) / pref.count;
   }
 
   private updateTonePreference(profile: UserPreferenceProfile, tone: string, content: ContentPerformanceMetrics): void {

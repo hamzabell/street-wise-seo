@@ -297,6 +297,7 @@ export class CustomerJourneyMapper {
         name: 'The Researcher',
         demographics: {
           age: '25-45',
+          location: 'Urban and suburban areas',
           education: 'Bachelor\'s degree or higher',
           income: 'Middle to upper-middle class',
           familyStatus: 'Single or young family'
@@ -304,18 +305,25 @@ export class CustomerJourneyMapper {
         psychographics: {
           values: ['Quality', 'Expertise', 'Reliability'],
           interests: ['Industry trends', 'Professional development'],
-          personality: ['Analytical', 'Detail-oriented', 'Cautious']
+          lifestyle: ['Professional', 'Career-focused'],
+          personality: ['Analytical', 'Detail-oriented', 'Cautious'],
+          motivations: ['Career advancement', 'Knowledge acquisition'],
+          challenges: ['Time constraints', 'Information overload']
         },
         behavioral: {
-          researchMethods: ['In-depth online research', 'Comparison shopping', 'Reading reviews'],
+          buyingHabits: ['Research-intensive purchases', 'Value-seeking'],
           decisionFactors: ['Quality', 'Expertise', 'ROI', 'Support'],
-          preferredChannels: ['Website', 'Email', 'Professional networks']
+          researchMethods: ['In-depth online research', 'Comparison shopping', 'Reading reviews'],
+          preferredChannels: ['Website', 'Email', 'Professional networks'],
+          contentConsumption: ['Detailed guides', 'Industry publications'],
+          painPointTriggers: ['Complex decisions', 'Risk aversion']
         }
       },
       {
         name: 'The Busy Professional',
         demographics: {
           age: '30-55',
+          location: 'Urban and suburban areas',
           income: 'Upper-middle class or higher',
           education: 'Bachelor\'s degree or higher',
           familyStatus: 'Established family'
@@ -323,18 +331,25 @@ export class CustomerJourneyMapper {
         psychographics: {
           values: ['Time-saving', 'Efficiency', 'Convenience'],
           interests: ['Business', 'Technology', 'Family activities'],
-          personality: ['Goal-oriented', 'Efficient', 'Decisive']
+          lifestyle: ['Busy', 'Family-oriented'],
+          personality: ['Goal-oriented', 'Efficient', 'Decisive'],
+          motivations: ['Work-life balance', 'Family success'],
+          challenges: ['Time management', 'Competing priorities']
         },
         behavioral: {
-          researchMethods: ['Quick searches', 'Recommendations', 'Trusted sources'],
+          buyingHabits: ['Quick decisions', 'Convenience-focused'],
           decisionFactors: ['Speed', 'Convenience', 'Reputation', 'Price'],
-          preferredChannels: ['Mobile', 'Email', 'Social media']
+          researchMethods: ['Quick searches', 'Recommendations', 'Trusted sources'],
+          preferredChannels: ['Mobile', 'Email', 'Social media'],
+          contentConsumption: ['Quick summaries', 'Mobile-friendly content'],
+          painPointTriggers: ['Time pressure', 'Complex processes']
         }
       },
       {
         name: 'The Budget-Conscious Buyer',
         demographics: {
           age: '20-40',
+          location: 'Urban, suburban, and rural areas',
           income: 'Lower to middle class',
           education: 'High school to some college',
           familyStatus: 'Single or young family'
@@ -342,12 +357,18 @@ export class CustomerJourneyMapper {
         psychographics: {
           values: ['Value', 'Savings', 'Practicality'],
           interests: ['Deals', 'DIY', 'Family activities'],
-          personality: ['Practical', 'Price-sensitive', 'Deal-savvy']
+          lifestyle: ['Budget-conscious', 'Family-focused'],
+          personality: ['Practical', 'Price-sensitive', 'Deal-savvy'],
+          motivations: ['Financial security', 'Family well-being'],
+          challenges: ['Budget constraints', 'Limited time']
         },
         behavioral: {
-          researchMethods: ['Price comparison', 'Deal hunting', 'Word of mouth'],
+          buyingHabits: ['Price comparison', 'Deal hunting'],
           decisionFactors: ['Price', 'Value', 'Reviews', 'Discounts'],
-          preferredChannels: ['Social media', 'Email newsletters', 'Deal sites']
+          researchMethods: ['Price comparison', 'Deal hunting', 'Word of mouth'],
+          preferredChannels: ['Social media', 'Email newsletters', 'Deal sites'],
+          contentConsumption: ['Deal sites', 'Review platforms'],
+          painPointTriggers: ['Budget concerns', 'Price sensitivity']
         }
       }
     ];

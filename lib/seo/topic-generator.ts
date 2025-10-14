@@ -9,7 +9,7 @@ import { analyzeContent } from './content-analyzer';
 import { getIndustryTemplate, generateIndustryPrompt, getSeasonalSuggestions, getLocalServicePatterns, getCurrentSeason } from './industry-templates';
 import { detectLocationCharacteristics, getLocationAwareSeasonalTopics } from './location-awareness';
 import { generateCustomerQuestions } from './question-generator';
-import { analyzeContentPerformance, generatePersonalizationInsights } from './content-performance-tracker';
+import { generatePersonalizationInsights } from './content-performance-tracker';
 import { performCompetitorAnalysis } from './competitor-intelligence';
 import { analyzeMarketTrends, getQuickTrendInsights } from './market-trend-analyzer';
 import { generatePredictiveRecommendations } from './predictive-content-engine';
@@ -61,7 +61,7 @@ export interface GeneratedTopic {
   suggestedTags: string[];
   relevanceScore?: number;
   reasoning?: string;
-  source?: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity' | 'personalized';
+  source?: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity' | 'market_opportunity' | 'competitive_gap' | 'personalized';
   relatedContent?: string;
   // Mobile optimization fields
   mobileFriendly?: boolean;
@@ -139,9 +139,9 @@ export class TopicGenerator {
         console.log('🧠 [TOPIC GENERATOR] Generating personalization insights...');
         personalizationInsights = await generatePersonalizationInsights(validated.supabaseUserId);
         console.log('✅ [TOPIC GENERATOR] Personalization insights generated:', {
-          optimalContentTypes: personalizationInsights.optimalContentTypes?.length || 0,
-          preferredTopics: personalizationInsights.preferredTopics?.length || 0,
-          recommendedTones: personalizationInsights.recommendedTones?.length || 0
+          optimalContentTypes: personalizationInsights.contentRecommendations?.optimalContentTypes?.length || 0,
+          preferredTopics: Object.keys(personalizationInsights.userProfile?.preferredTopics || {}).length,
+          recommendedTones: personalizationInsights.contentRecommendations?.toneRecommendations?.length || 0
         });
       } catch (error) {
         console.warn('⚠️ [TOPIC GENERATOR] Personalization failed, proceeding without it:', error);
@@ -295,8 +295,8 @@ export class TopicGenerator {
         contentAnalysis,
         validated.industryId,
         seasonalTopics,
-        personalizationInsights,
-        competitorIntelligence,
+        competitorAnalysis ? [competitorAnalysis] : undefined,
+        competitorIntelligence || undefined,
         culturalRequest
       );
 
@@ -1010,6 +1010,9 @@ export class TopicGenerator {
               totalTopics: metadata.totalTopics || generatedTopics.length,
               averageDifficulty: metadata.averageDifficulty || 'medium',
               totalEstimatedVolume: metadata.totalEstimatedVolume || 0,
+              personalizationEnabled: metadata.personizationEnabled || false,
+              marketAnalysisEnabled: metadata.marketAnalysisEnabled || false,
+              predictiveRecommendationsEnabled: metadata.predictiveRecommendationsEnabled || false,
             }
           };
         } catch (parseError) {
@@ -1025,6 +1028,9 @@ export class TopicGenerator {
               totalTopics: 0,
               averageDifficulty: 'medium',
               totalEstimatedVolume: 0,
+              personalizationEnabled: false,
+              marketAnalysisEnabled: false,
+              predictiveRecommendationsEnabled: false,
             }
           };
         }
@@ -1192,7 +1198,7 @@ export class TopicGenerator {
         predictedPerformance,
         userPreferenceMatch: personalizedScore,
         personalizationReasons,
-        optimalContentType: optimalContentType?.contentType,
+        optimalContentType: optimalContentType?.type,
         bestPerformingTone: recommendedTone?.tone,
         source: personalizedScore > 70 ? 'personalized' : topic.source
       };
@@ -1398,7 +1404,7 @@ export class TopicGenerator {
           ...(topic.personalizationReasons || []),
           ...marketReasons
         ],
-        source: marketScore > 30 ? 'market_intelligence' : topic.source
+        source: marketScore > 30 ? 'market_opportunity' as const : topic.source
       };
     }).sort((a, b) => {
       // Sort by combined personalization and market scores

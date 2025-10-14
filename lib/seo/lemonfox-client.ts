@@ -970,8 +970,10 @@ Generate 10-15 SEO topics with reasoning now. Start with "1."`;
   async analyzeTopicMetadata(topicsWithReasoning: Array<{
     topic: string;
     reasoning: string;
-    source: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity';
+    source: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity' | 'market_opportunity' | 'competitive_gap';
     relatedContent?: string;
+    competitiveInsight?: string;
+    marketPositioning?: string;
   }>): Promise<Array<{
     topic: string;
     difficulty: 'easy' | 'medium' | 'hard';
@@ -979,8 +981,10 @@ Generate 10-15 SEO topics with reasoning now. Start with "1."`;
     competition: 'low' | 'medium' | 'high';
     suggestedTags: string[];
     reasoning: string;
-    source: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity';
+    source: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity' | 'market_opportunity' | 'competitive_gap';
     relatedContent?: string;
+    competitiveInsight?: string;
+    marketPositioning?: string;
   }>> {
     const systemPrompt = `You are an SEO expert. Analyze the provided topics and estimate their SEO metrics.
 
@@ -1060,8 +1064,10 @@ For searchVolume, use the midpoint of ranges:
   private parseMarkdownAnalysisWithReasoning(content: string, topicsWithReasoning: Array<{
     topic: string;
     reasoning: string;
-    source: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity';
+    source: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity' | 'market_opportunity' | 'competitive_gap';
     relatedContent?: string;
+    competitiveInsight?: string;
+    marketPositioning?: string;
   }>): Array<{
     topic: string;
     difficulty: 'easy' | 'medium' | 'hard';
@@ -1069,8 +1075,10 @@ For searchVolume, use the midpoint of ranges:
     competition: 'low' | 'medium' | 'high';
     suggestedTags: string[];
     reasoning: string;
-    source: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity';
+    source: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity' | 'market_opportunity' | 'competitive_gap';
     relatedContent?: string;
+    competitiveInsight?: string;
+    marketPositioning?: string;
   }> {
     // Simple fallback that preserves the original topic structure
     return topicsWithReasoning.map(originalTopic => ({

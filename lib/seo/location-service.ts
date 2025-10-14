@@ -605,7 +605,7 @@ class LocationService {
     const { type, address } = suggestion;
 
     if (['city', 'town', 'village'].includes(type)) {
-      return type;
+      return type as 'city' | 'town' | 'village';
     } else if (address.city) {
       return 'city';
     } else if (address.town) {

@@ -747,7 +747,8 @@ export async function performCompetitorAnalysis(
     totalWordCount: 0,
     totalImages: 0,
     internalLinkingScore: 50,
-    technicalIssues: []
+    technicalIssues: [],
+    crawledAt: new Date().toISOString()
   } as WebsiteAnalysisResult;
 
   return await competitorIntelligenceAnalyzer.analyzeCompetitors(

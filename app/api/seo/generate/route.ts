@@ -173,6 +173,14 @@ export async function POST(request: NextRequest) {
       const topicRequest = {
         ...requestData,
         supabaseUserId: user.id, // Add user ID for caching logic
+        // Add default values for advanced options
+        enablePersonalization: true,
+        maxTopics: 20,
+        enableMarketAnalysis: false,
+        enablePredictiveRecommendations: false,
+        marketAnalysisTimeframe: '30_days' as const,
+        predictionAccuracy: 'balanced' as const,
+        includeSeasonalForecast: false,
       };
 
       console.log('🚀 [API] Calling generateSEOTopics with request:', {
