@@ -20,6 +20,7 @@ const SaveTopicSchema = z.object({
   businessType: z.string().optional(),
   targetAudience: z.string().optional(),
   location: z.string().optional(),
+  detailedLocation: z.any().optional(), // JSON object with enhanced location data
   tone: z.enum(['professional', 'casual', 'friendly', 'authoritative', 'conversational', 'humorous', 'inspirational']).optional(),
   additionalContext: z.string().optional(),
   websiteUrl: z.string().url().optional().or(z.literal('')),
@@ -88,6 +89,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Prepare enhanced location data for storage
+    const detailedLocationString = validatedData.detailedLocation
+      ? JSON.stringify(validatedData.detailedLocation)
+      : undefined;
+
     // Save the topic with enhanced personalization fields
     const savedTopic = await createSavedTopic({
       supabaseUserId: user.id,
@@ -101,6 +107,7 @@ export async function POST(request: NextRequest) {
       businessType: validatedData.businessType,
       targetAudience: validatedData.targetAudience,
       location: validatedData.location,
+      detailedLocation: detailedLocationString,
       tone: validatedData.tone,
       additionalContext: validatedData.additionalContext,
       websiteUrl: validatedData.websiteUrl,

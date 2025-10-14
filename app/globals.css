@@ -294,6 +294,21 @@
   .markdown-content a {
     @apply text-blue-600 hover:text-blue-800 underline transition-colors;
   }
+
+  /* Mobile bottom navigation safe area */
+  .mobile-safe-area {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  .mobile-content-safe {
+    padding-bottom: 5rem; /* 80px - ensures content is above the 64px nav */
+  }
+
+  @media (min-width: 1024px) {
+    .mobile-content-safe {
+      padding-bottom: 0;
+    }
+  }
 }
 
 @layer base {

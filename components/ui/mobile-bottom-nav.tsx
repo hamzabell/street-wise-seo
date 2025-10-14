@@ -6,10 +6,8 @@ import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
-  Users,
   Wand2,
   Bookmark,
-  Building,
   Shield,
   Home,
   Sparkles,
@@ -44,12 +42,6 @@ export function MobileBottomNav({ onQuickAction }: MobileBottomNavProps) {
       active: pathname === '/dashboard/saved-topics'
     },
     {
-      href: '/dashboard/citation-tracker',
-      icon: Building,
-      label: 'Citations',
-      active: pathname === '/dashboard/citation-tracker'
-    },
-    {
       href: '/dashboard/security',
       icon: Shield,
       label: 'Settings',
@@ -59,7 +51,7 @@ export function MobileBottomNav({ onQuickAction }: MobileBottomNavProps) {
 
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200">
-      <div className="grid grid-cols-5 h-16">
+      <div className="grid grid-cols-4 h-16">
         {navItems.map((item) => (
           <Link
             key={item.href}

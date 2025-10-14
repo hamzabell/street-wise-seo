@@ -111,6 +111,7 @@ export const savedTopics = pgTable('saved_topics', {
   businessType: text('business_type'),
   targetAudience: text('target_audience'),
   location: text('location'),
+  detailedLocation: text('detailed_location'), // JSON string with enhanced location data
   tone: text('tone'), // professional, casual, friendly, authoritative, conversational, humorous, inspirational
   additionalContext: text('additional_context'), // User's specific instructions and preferences
   websiteUrl: text('website_url'), // Website to use for context during content generation

@@ -3,13 +3,21 @@
  */
 
 import { z } from 'zod';
-import { getLemonfoxClient } from './lemonfox-client';
+import { getLemonfoxClient, type CulturalGenerationRequest } from './lemonfox-client';
 import { crawlWebsite } from './website-crawler';
 import { analyzeContent } from './content-analyzer';
 import { getIndustryTemplate, generateIndustryPrompt, getSeasonalSuggestions, getLocalServicePatterns, getCurrentSeason } from './industry-templates';
+import { detectLocationCharacteristics, getLocationAwareSeasonalTopics } from './location-awareness';
 import { generateCustomerQuestions } from './question-generator';
+import { analyzeContentPerformance, generatePersonalizationInsights } from './content-performance-tracker';
+import { performCompetitorAnalysis } from './competitor-intelligence';
+import { analyzeMarketTrends, getQuickTrendInsights } from './market-trend-analyzer';
+import { generatePredictiveRecommendations } from './predictive-content-engine';
 import type { TopicGeneration, SavedTopic, NewTopicGeneration, NewSavedTopic } from '../db/schema';
 import type { CustomerQuestion } from './question-generator';
+import type { PersonalizationInsights } from './content-performance-tracker';
+import type { TrendAnalysisResult, MarketInsight } from './market-trend-analyzer';
+import type { PredictiveContentResult } from './predictive-content-engine';
 import {
   createTopicGeneration,
   getTopicGenerationsByUserId,
@@ -29,6 +37,18 @@ export const TopicGenerationRequestSchema = z.object({
   competitorUrl: z.string().url('Invalid competitor URL').optional().or(z.literal('')),
   forceRecrawl: z.boolean().default(false), // Force re-crawl even if recently crawled
   supabaseUserId: z.string().optional(), // User ID for caching checks
+  enablePersonalization: z.boolean().default(true), // Enable performance-based personalization
+  maxTopics: z.number().default(20), // Maximum number of topics to generate
+  // Advanced contextual intelligence options
+  enableMarketAnalysis: z.boolean().default(false), // Enable market trend analysis
+  enablePredictiveRecommendations: z.boolean().default(false), // Enable predictive content engine
+  marketAnalysisTimeframe: z.enum(['current', '30_days', '90_days', '6_months']).default('30_days'),
+  predictionAccuracy: z.enum(['conservative', 'balanced', 'aggressive']).default('balanced'),
+  includeSeasonalForecast: z.boolean().default(false),
+  // Cultural and language options
+  languagePreference: z.enum(['english', 'native', 'cultural_english']).default('english'),
+  formalityLevel: z.enum(['formal', 'professional', 'casual', 'slang_heavy']).default('professional'),
+  contentPurpose: z.enum(['marketing', 'educational', 'conversational', 'technical']).default('marketing'),
 });
 
 export type TopicGenerationRequest = z.infer<typeof TopicGenerationRequestSchema>;
@@ -41,7 +61,7 @@ export interface GeneratedTopic {
   suggestedTags: string[];
   relevanceScore?: number;
   reasoning?: string;
-  source?: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity';
+  source?: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity' | 'personalized';
   relatedContent?: string;
   // Mobile optimization fields
   mobileFriendly?: boolean;
@@ -58,6 +78,13 @@ export interface GeneratedTopic {
   implementationTime?: '15 min' | '30 min' | '1 hour' | '2+ hours';
   contentChecklist?: string[];
   titleVariations?: string[];
+  // Performance-based personalization fields
+  personalizedScore?: number;
+  predictedPerformance?: number;
+  userPreferenceMatch?: number;
+  personalizationReasons?: string[];
+  optimalContentType?: string;
+  bestPerformingTone?: string;
 }
 
 export interface TopicGenerationResult {
@@ -71,10 +98,19 @@ export interface TopicGenerationResult {
     totalTopics: number;
     averageDifficulty: string;
     totalEstimatedVolume: number;
+    personalizationEnabled: boolean;
+    averagePersonalizedScore?: number;
+    averagePredictedPerformance?: number;
+    marketAnalysisEnabled: boolean;
+    predictiveRecommendationsEnabled: boolean;
   };
   websiteAnalysis?: any;
   contentAnalysis?: any;
   competitorAnalysis?: any;
+  personalizationInsights?: PersonalizationInsights;
+  marketAnalysis?: TrendAnalysisResult;
+  predictiveRecommendations?: PredictiveContentResult;
+  marketInsights?: MarketInsight[];
 }
 
 export class TopicGenerator {
@@ -86,18 +122,42 @@ export class TopicGenerator {
     // Get industry template
     const industryTemplate = getIndustryTemplate(validated.industryId);
     const industryName = industryTemplate?.name || 'Service Business';
-    const seasonalTopics = getSeasonalSuggestions(validated.industryId);
 
-  
+    // Get location-aware seasonal topics
+    let seasonalTopics = getSeasonalSuggestions(validated.industryId);
+    if (validated.location) {
+      const locationCharacteristics = detectLocationCharacteristics(validated.location);
+      const locationAwareSeasonal = getLocationAwareSeasonalTopics(validated.industryId, locationCharacteristics);
+      // Prioritize location-aware topics
+      seasonalTopics = [...locationAwareSeasonal, ...seasonalTopics.slice(0, 2)];
+    }
+
+    // Initialize personalization variables
+    let personalizationInsights: PersonalizationInsights | undefined;
+    if (validated.enablePersonalization && validated.supabaseUserId) {
+      try {
+        console.log('🧠 [TOPIC GENERATOR] Generating personalization insights...');
+        personalizationInsights = await generatePersonalizationInsights(validated.supabaseUserId);
+        console.log('✅ [TOPIC GENERATOR] Personalization insights generated:', {
+          optimalContentTypes: personalizationInsights.optimalContentTypes?.length || 0,
+          preferredTopics: personalizationInsights.preferredTopics?.length || 0,
+          recommendedTones: personalizationInsights.recommendedTones?.length || 0
+        });
+      } catch (error) {
+        console.warn('⚠️ [TOPIC GENERATOR] Personalization failed, proceeding without it:', error);
+      }
+    }
+
     try {
       let websiteAnalysis = null;
       let contentAnalysis = null;
       let competitorAnalysis = null;
+      let competitorIntelligence = null;
 
       // If website URL provided, check if recently crawled or crawl and analyze it
       if (validated.websiteUrl) {
         const websiteDomain = new URL(validated.websiteUrl).hostname;
-      
+
         try {
           // Check if website was recently crawled (only for primary website, not competitors)
           let shouldUseCachedData = false;
@@ -178,6 +238,21 @@ export class TopicGenerator {
             }
           }
 
+          // Generate advanced competitor intelligence if we have competitor data
+          if (competitorAnalysis && validated.enablePersonalization) {
+            try {
+              console.log('🕵️ [TOPIC GENERATOR] Analyzing competitor intelligence...');
+              competitorIntelligence = await performCompetitorAnalysis(
+                [competitorAnalysis],
+                industryName,
+                validated.location
+              );
+              console.log('✅ [TOPIC GENERATOR] Competitor intelligence generated');
+            } catch (error) {
+              console.warn('⚠️ [TOPIC GENERATOR] Competitor intelligence analysis failed:', error);
+            }
+          }
+
           // Analyze content (only if we have fresh data or sufficient cached data)
           if (websiteAnalysis && (websiteAnalysis.crawledPages.length > 0 || websiteAnalysis.topics.length > 0)) {
             console.log('🧠 [TOPIC GENERATOR] Analyzing content...');
@@ -199,8 +274,18 @@ export class TopicGenerator {
         console.log('ℹ️ [TOPIC GENERATOR] No website URL provided, using AI-only generation');
       }
 
+      // Prepare cultural generation request
+      const culturalRequest: CulturalGenerationRequest = {
+        location: validated.location,
+        languagePreference: validated.languagePreference,
+        formalityLevel: validated.formalityLevel,
+        contentPurpose: validated.contentPurpose,
+        targetAudience: validated.targetAudience,
+        businessType: industryName
+      };
+
       // Generate topics using AI (with or without website data)
-      console.log('🤖 [TOPIC GENERATOR] Generating AI topics...');
+      console.log('🤖 [TOPIC GENERATOR] Generating AI topics with cultural adaptation...');
       const topics = await this.lemonfoxClient.generateSEOTopics(
         validated.topic,
         industryName,
@@ -209,7 +294,10 @@ export class TopicGenerator {
         websiteAnalysis,
         contentAnalysis,
         validated.industryId,
-        seasonalTopics
+        seasonalTopics,
+        personalizationInsights,
+        competitorIntelligence,
+        culturalRequest
       );
 
       // Analyze metadata for each topic
@@ -232,7 +320,8 @@ export class TopicGenerator {
       // Add seasonal and urgency analysis
       const topicsWithSeasonalData = this.addSeasonalAndUrgencyAnalysis(
         mobileOptimizedTopics,
-        validated.industryId
+        validated.industryId,
+        validated.location
       );
 
       // Generate customer questions for top topics
@@ -255,18 +344,111 @@ export class TopicGenerator {
         validated.industryId
       );
 
-      // Generate metadata
-      const metadata = this.generateMetadata(validated, topicsWithImplementation);
+      // Apply performance-based personalization if enabled
+      const personalizedTopics = validated.enablePersonalization
+        ? this.applyPerformancePersonalization(topicsWithImplementation, personalizationInsights, competitorIntelligence)
+        : topicsWithImplementation;
 
-      console.log(`✅ [TOPIC GENERATOR] Generated ${topicsWithImplementation.length} topics with implementation details`);
+      // Initialize market analysis variables
+      let marketAnalysis: TrendAnalysisResult | undefined;
+      let predictiveRecommendations: PredictiveContentResult | undefined;
+      let marketInsights: MarketInsight[] = [];
+
+      // Perform market trend analysis if enabled
+      if (validated.enableMarketAnalysis) {
+        try {
+          console.log('📈 [TOPIC GENERATOR] Performing market trend analysis...');
+          marketAnalysis = await analyzeMarketTrends({
+            topic: validated.topic,
+            industry: industryName,
+            location: validated.location,
+            timeframe: validated.marketAnalysisTimeframe,
+            includeCompetitors: true,
+            includeSeasonal: validated.includeSeasonalForecast,
+            detailLevel: validated.predictionAccuracy === 'aggressive' ? 'deep' :
+                         validated.predictionAccuracy === 'conservative' ? 'basic' : 'comprehensive'
+          });
+
+          // Extract key market insights
+          marketInsights = marketAnalysis.marketInsights.slice(0, 5);
+          console.log('✅ [TOPIC GENERATOR] Market analysis completed:', {
+            currentTrends: marketAnalysis.currentTrends.length,
+            emergingOpportunities: marketAnalysis.emergingOpportunities.length,
+            insights: marketInsights.length
+          });
+        } catch (error) {
+          console.warn('⚠️ [TOPIC GENERATOR] Market analysis failed:', error);
+        }
+      }
+
+      // Generate predictive recommendations if enabled
+      if (validated.enablePredictiveRecommendations && validated.supabaseUserId) {
+        try {
+          console.log('🔮 [TOPIC GENERATOR] Generating predictive recommendations...');
+          predictiveRecommendations = await generatePredictiveRecommendations({
+            businessContext: {
+              industry: industryName,
+              location: validated.location,
+              targetAudience: validated.targetAudience,
+              businessGoals: ['Increase organic traffic', 'Improve search rankings'],
+              contentCapabilities: ['blog_post', 'social_media', 'website_page'],
+              resources: {
+                time: 'medium',
+                budget: 'medium',
+                expertise: ['Content writing', 'SEO']
+              }
+            },
+            analysisOptions: {
+              timeframe: validated.marketAnalysisTimeframe === 'current' ? '30_days' :
+                         validated.marketAnalysisTimeframe === '30_days' ? '30_days' :
+                         validated.marketAnalysisTimeframe === '90_days' ? '90_days' : '6_months',
+              predictionAccuracy: validated.predictionAccuracy,
+              includeCompetitors: true,
+              includeSeasonal: validated.includeSeasonalForecast,
+              maxRecommendations: 10
+            },
+            personalizationData: {
+              userId: validated.supabaseUserId,
+              historicalPerformance: true,
+              userPreferences: true
+            }
+          });
+          console.log('✅ [TOPIC GENERATOR] Predictive recommendations generated:', {
+            predictions: predictiveRecommendations.predictions.length,
+            strategicInsights: predictiveRecommendations.strategicInsights.length
+          });
+        } catch (error) {
+          console.warn('⚠️ [TOPIC GENERATOR] Predictive recommendations failed:', error);
+        }
+      }
+
+      // Apply market intelligence and predictive insights to topics
+      const enhancedTopics = this.applyMarketIntelligence(
+        personalizedTopics,
+        marketAnalysis,
+        predictiveRecommendations,
+        marketInsights
+      );
+
+      // Limit to max topics if specified
+      const finalTopics = validated.maxTopics ? enhancedTopics.slice(0, validated.maxTopics) : enhancedTopics;
+
+      // Generate metadata
+      const metadata = this.generateMetadata(validated, finalTopics, personalizationInsights);
+
+      console.log(`✅ [TOPIC GENERATOR] Generated ${finalTopics.length} topics with advanced contextual intelligence`);
 
       return {
         inputTopic: validated.topic,
-        generatedTopics: topicsWithImplementation,
+        generatedTopics: finalTopics,
         metadata,
         websiteAnalysis,
         contentAnalysis,
         competitorAnalysis,
+        personalizationInsights,
+        marketAnalysis,
+        predictiveRecommendations,
+        marketInsights,
       };
     } catch (error) {
       console.error('❌ [TOPIC GENERATOR] Error in topic generation:', error);
@@ -374,7 +556,8 @@ export class TopicGenerator {
 
   private generateMetadata(
     request: TopicGenerationRequest,
-    topics: GeneratedTopic[]
+    topics: GeneratedTopic[],
+    personalizationInsights?: PersonalizationInsights
   ) {
     const totalVolume = topics.reduce((sum, topic) => sum + topic.searchVolume, 0);
     const difficultyCounts = topics.reduce(
@@ -390,6 +573,10 @@ export class TopicGenerator {
       { difficulty: 'medium', count: 0 }
     ).difficulty;
 
+    // Calculate personalization metrics
+    const averagePersonalizedScore = topics.reduce((sum, topic) => sum + (topic.personalizedScore || 0), 0) / topics.length;
+    const averagePredictedPerformance = topics.reduce((sum, topic) => sum + (topic.predictedPerformance || 0), 0) / topics.length;
+
     const industryTemplate = getIndustryTemplate(request.industryId);
 
     return {
@@ -401,6 +588,11 @@ export class TopicGenerator {
       averageDifficulty,
       totalEstimatedVolume: totalVolume,
       industryId: request.industryId,
+      personalizationEnabled: request.enablePersonalization,
+      averagePersonalizedScore: request.enablePersonalization ? averagePersonalizedScore : undefined,
+      averagePredictedPerformance: request.enablePersonalization ? averagePredictedPerformance : undefined,
+      marketAnalysisEnabled: request.enableMarketAnalysis,
+      predictiveRecommendationsEnabled: request.enablePredictiveRecommendations,
     };
   }
 
@@ -452,9 +644,16 @@ export class TopicGenerator {
 
   private addSeasonalAndUrgencyAnalysis(
     topics: GeneratedTopic[],
-    industryId: string
+    industryId: string,
+    location?: string
   ): GeneratedTopic[] {
-    const currentSeason = getCurrentSeason();
+    // Get location-aware season if location provided
+    let currentSeason = getCurrentSeason();
+    const locationCharacteristics = location ? detectLocationCharacteristics(location) : null;
+    if (locationCharacteristics) {
+      currentSeason = locationCharacteristics.season as any;
+    }
+
     const seasonalTopics = getSeasonalSuggestions(industryId);
     const template = getIndustryTemplate(industryId);
 
@@ -475,14 +674,24 @@ export class TopicGenerator {
         seasonalRelevance = 'current';
       }
 
-      // Check for seasonal keywords
-      const seasonalKeywords = {
+      // Check for seasonal keywords - location-aware
+      let seasonalKeywords: Record<string, string[]> = {
         spring: ['spring', 'march', 'april', 'may', 'easter', 'bloom', 'garden', 'cleaning'],
         summer: ['summer', 'june', 'july', 'august', 'heat', 'vacation', 'outdoor', 'pool'],
         fall: ['fall', 'autumn', 'september', 'october', 'november', 'leaves', 'halloween', 'thanksgiving'],
         winter: ['winter', 'december', 'january', 'february', 'snow', 'cold', 'heating', 'holiday', 'christmas'],
         holiday: ['holiday', 'christmas', 'thanksgiving', 'easter', 'halloween', 'valentine', 'fourth of july']
       };
+
+      // Override with location-specific seasonal keywords
+      if (locationCharacteristics && locationCharacteristics.country === 'Nigeria') {
+        seasonalKeywords = {
+          harmattan: ['harmattan', 'dust', 'dry', 'december', 'january', 'febuary', 'ash', 'fog', 'cold', 'chap', 'lips'],
+          dry: ['dry', 'heat', 'hot', 'march', 'april', 'may', 'sun', 'temperature', 'hot season', 'dehydration'],
+          rainy: ['rain', 'rainy', 'wet', 'june', 'july', 'august', 'september', 'flood', 'storm', 'umbrella', 'mud', 'traffic'],
+          holiday: ['christmas', 'new year', 'easter', 'sallah', 'celebration', 'festival']
+        };
+      }
 
       Object.entries(seasonalKeywords).forEach(([season, keywords]) => {
         if (keywords.some(keyword => topicLower.includes(keyword))) {
@@ -848,6 +1057,355 @@ export class TopicGenerator {
       console.error('Error saving single topic:', error);
       throw new Error('Failed to save topic');
     }
+  }
+
+  private applyPerformancePersonalization(
+    topics: GeneratedTopic[],
+    personalizationInsights?: PersonalizationInsights,
+    competitorIntelligence?: any
+  ): GeneratedTopic[] {
+    if (!personalizationInsights) {
+      return topics;
+    }
+
+    console.log('🎯 [TOPIC GENERATOR] Applying performance-based personalization to topics...');
+
+    return topics.map(topic => {
+      const personalizationReasons: string[] = [];
+      let personalizedScore = 0;
+      let predictedPerformance = 50; // Base performance prediction
+
+      // Topic relevance scoring based on user preferences
+      const topicLower = topic.topic.toLowerCase();
+
+      // Check if topic matches preferred topics
+      const topicPreferenceMatch = personalizationInsights.contentRecommendations?.topicSuggestions?.find(pref =>
+        topicLower.includes(pref.topic.toLowerCase()) ||
+        pref.topic.toLowerCase().includes(topicLower)
+      );
+
+      if (topicPreferenceMatch) {
+        personalizedScore += topicPreferenceMatch.priority * 0.3;
+        predictedPerformance += topicPreferenceMatch.expectedPerformance * 0.2;
+        personalizationReasons.push(`Matches user's preferred topic pattern (${topicPreferenceMatch.topic})`);
+      }
+
+      // Content type optimization
+      const optimalContentType = personalizationInsights.contentRecommendations?.optimalContentTypes?.find(type =>
+        type.type === this.inferContentTypeFromTopic(topicLower)
+      );
+
+      if (optimalContentType) {
+        personalizedScore += optimalContentType.confidence * 0.2;
+        predictedPerformance += optimalContentType.expectedScore * 0.15;
+        personalizationReasons.push(`Optimal for ${optimalContentType.type} content format`);
+      }
+
+      // Tone preference matching
+      const recommendedTone = personalizationInsights.contentRecommendations?.toneRecommendations?.find(tone =>
+        this.topicMatchesTone(topicLower, tone.tone)
+      );
+
+      if (recommendedTone) {
+        personalizedScore += recommendedTone.effectiveness * 0.15;
+        personalizationReasons.push(`Aligns with ${recommendedTone.tone} communication style`);
+      }
+
+      // Length preference optimization
+      const lengthPref = personalizationInsights.contentRecommendations?.structuralPreferences;
+      if (topic.recommendedLength && lengthPref) {
+        const lengthScore = this.calculateLengthScore(topic.recommendedLength, lengthPref);
+        personalizedScore += lengthScore * 0.1;
+        if (lengthScore > 0.7) {
+          personalizationReasons.push('Optimal content length for audience');
+        }
+      }
+
+      // Competitor differentiation opportunities
+      if (competitorIntelligence && competitorIntelligence.competitiveGaps) {
+        const gapMatch = competitorIntelligence.competitiveGaps.find((gap: any) =>
+          topicLower.includes(gap.topic.toLowerCase()) ||
+          gap.topic.toLowerCase().includes(topicLower)
+        );
+
+        if (gapMatch) {
+          personalizedScore += gapMatch.opportunityScore * 0.25;
+          predictedPerformance += 15;
+          personalizationReasons.push('Addresses competitor content gap');
+          topic.source = 'competitive_gap';
+        }
+      }
+
+      // User-specific pattern matching
+      if (personalizationInsights.userProfile) {
+        const profile = personalizationInsights.userProfile;
+
+        // Time-of-day performance adjustment
+        const currentHour = new Date().getHours();
+        const timePerformance = profile.peakEngagementTimes.find(time =>
+          currentHour >= time && currentHour < time + 2
+        );
+
+        if (timePerformance) {
+          predictedPerformance += 10 * 0.1;
+          personalizationReasons.push('Optimal for current time period');
+        }
+
+        // Seasonal performance adjustment
+        const currentSeason = this.getCurrentSeason();
+        const seasonalPerformance = profile.seasonalPreferences[currentSeason];
+
+        if (seasonalPerformance && seasonalPerformance > 25) {
+          predictedPerformance += seasonalPerformance * 0.1;
+          personalizationReasons.push('Seasonally relevant content');
+        }
+      }
+
+      // Apply structural preferences
+      if (personalizationInsights.contentRecommendations?.structuralPreferences) {
+        const structPref = personalizationInsights.contentRecommendations.structuralPreferences;
+
+        if (topic.actionOriented) {
+          personalizedScore += 10;
+          personalizationReasons.push('Action-oriented content preference match');
+        }
+
+        if (topic.mobileFriendly) {
+          personalizedScore += 8;
+          personalizationReasons.push('Mobile-optimized for user audience');
+        }
+
+        if (topic.voiceSearchFriendly) {
+          personalizedScore += 6;
+          personalizationReasons.push('Voice search optimized');
+        }
+      }
+
+      // Calculate final scores
+      personalizedScore = Math.min(100, Math.max(0, personalizedScore));
+      predictedPerformance = Math.min(100, Math.max(0, predictedPerformance));
+
+      // Update topic with personalization data
+      return {
+        ...topic,
+        personalizedScore,
+        predictedPerformance,
+        userPreferenceMatch: personalizedScore,
+        personalizationReasons,
+        optimalContentType: optimalContentType?.contentType,
+        bestPerformingTone: recommendedTone?.tone,
+        source: personalizedScore > 70 ? 'personalized' : topic.source
+      };
+    }).sort((a, b) => {
+      // Sort by personalized score first, then predicted performance
+      const scoreA = (a.personalizedScore || 0) * 0.7 + (a.predictedPerformance || 0) * 0.3;
+      const scoreB = (b.personalizedScore || 0) * 0.7 + (b.predictedPerformance || 0) * 0.3;
+      return scoreB - scoreA;
+    });
+  }
+
+  private inferContentTypeFromTopic(topic: string): string {
+    const topicLower = topic.toLowerCase();
+
+    if (topicLower.includes('how to') || topicLower.includes('guide') || topicLower.includes('tutorial')) {
+      return 'blog_post';
+    } else if (topicLower.includes('emergency') || topicLower.includes('urgent') || topicLower.includes('quick')) {
+      return 'social_media';
+    } else if (topicLower.includes('service') || topicLower.includes('about') || topicLower.includes('company')) {
+      return 'website_page';
+    } else if (topicLower.includes('newsletter') || topicLower.includes('update') || topicLower.includes('announcement')) {
+      return 'email';
+    } else if (topicLower.includes('near') || topicLower.includes('local') || topicLower.includes('location')) {
+      return 'google_business_profile';
+    }
+
+    return 'blog_post'; // Default
+  }
+
+  private topicMatchesTone(topic: string, tone: string): boolean {
+    const topicLower = topic.toLowerCase();
+
+    switch (tone) {
+      case 'professional':
+        return topicLower.includes('guide') || topicLower.includes('professional') || topicLower.includes('expert');
+      case 'casual':
+        return topicLower.includes('tips') || topicLower.includes('easy') || topicLower.includes('simple');
+      case 'friendly':
+        return topicLower.includes('help') || topicLower.includes('friendly') || topicLower.includes('welcome');
+      case 'authoritative':
+        return topicLower.includes('ultimate') || topicLower.includes('complete') || topicLower.includes('master');
+      case 'conversational':
+        return topicLower.includes('talk') || topicLower.includes('chat') || topicLower.includes('discuss');
+      default:
+        return false;
+    }
+  }
+
+  private calculateLengthScore(recommendedLength: string, userPreferences: any): number {
+    if (!userPreferences || !userPreferences.optimalLength) {
+      // Default scores if no preferences available
+      switch (recommendedLength) {
+        case 'short':
+          return 0.5;
+        case 'medium':
+          return 0.7;
+        case 'long':
+          return 0.3;
+        default:
+          return 0.5;
+      }
+    }
+
+    const optimalLength = userPreferences.optimalLength;
+
+    // Score based on how close the recommended length is to optimal length
+    const lengthMap = { short: 300, medium: 800, long: 1500 };
+    const recommendedLengthValue = lengthMap[recommendedLength as keyof typeof lengthMap] || 800;
+
+    const difference = Math.abs(recommendedLengthValue - optimalLength);
+    const maxDifference = 1200; // Max possible difference
+
+    // Score between 0 and 1, higher when closer to optimal
+    return Math.max(0, 1 - (difference / maxDifference));
+  }
+
+  private getCurrentSeason(): string {
+    const month = new Date().getMonth();
+    if (month >= 2 && month <= 4) return 'spring';
+    if (month >= 5 && month <= 7) return 'summer';
+    if (month >= 8 && month <= 10) return 'fall';
+    return 'winter';
+  }
+
+  private applyMarketIntelligence(
+    topics: GeneratedTopic[],
+    marketAnalysis?: TrendAnalysisResult,
+    predictiveRecommendations?: PredictiveContentResult,
+    marketInsights?: MarketInsight[]
+  ): GeneratedTopic[] {
+    if (!marketAnalysis && !predictiveRecommendations) {
+      return topics;
+    }
+
+    console.log('🧠 [TOPIC GENERATOR] Applying market intelligence to topics...');
+
+    return topics.map(topic => {
+      const topicLower = topic.topic.toLowerCase();
+      let marketScore = 0;
+      const marketReasons: string[] = [];
+
+      // Apply market trend intelligence
+      if (marketAnalysis) {
+        // Check alignment with current trends
+        const matchingTrend = marketAnalysis.currentTrends.find(trend =>
+          topicLower.includes(trend.trend.toLowerCase()) ||
+          trend.trend.toLowerCase().includes(topicLower)
+        );
+
+        if (matchingTrend) {
+          marketScore += matchingTrend.growthRate * 0.2;
+          marketReasons.push(`Aligns with growing trend: ${matchingTrend.trend} (${matchingTrend.growthRate}% growth)`);
+          topic.predictedPerformance = (topic.predictedPerformance || 50) + 15;
+        }
+
+        // Check for emerging opportunities
+        const matchingOpportunity = marketAnalysis.emergingOpportunities.find(opp =>
+          topicLower.includes(opp.trend.toLowerCase()) ||
+          opp.trend.toLowerCase().includes(topicLower)
+        );
+
+        if (matchingOpportunity) {
+          marketScore += matchingOpportunity.growthRate * 0.3;
+          marketReasons.push(`First-mover opportunity in emerging trend: ${matchingOpportunity.trend}`);
+          topic.predictedPerformance = (topic.predictedPerformance || 50) + 25;
+          topic.source = 'market_opportunity';
+        }
+
+        // Check for declining trends to avoid
+        const decliningTrend = marketAnalysis.decliningTrends.find(trend =>
+          topicLower.includes(trend.trend.toLowerCase()) ||
+          trend.trend.toLowerCase().includes(topicLower)
+        );
+
+        if (decliningTrend) {
+          marketScore -= 20;
+          marketReasons.push(`Warning: Declining trend detected - ${decliningTrend.trend}`);
+          topic.predictedPerformance = Math.max(0, (topic.predictedPerformance || 50) - 20);
+        }
+
+        // Apply seasonal intelligence
+        if (marketAnalysis.seasonalForecast.length > 0) {
+          const currentSeason = this.getCurrentSeason();
+          const seasonalForecast = marketAnalysis.seasonalForecast.find(forecast =>
+            forecast.season === currentSeason && forecast.predictedTrends.some(trend =>
+              topicLower.includes(trend.toLowerCase()) || trend.toLowerCase().includes(topicLower)
+            )
+          );
+
+          if (seasonalForecast && seasonalForecast.opportunityScore > 70) {
+            marketScore += 15;
+            marketReasons.push(`Seasonally relevant content with high opportunity score`);
+            topic.seasonalRelevance = 'current';
+          }
+        }
+      }
+
+      // Apply predictive recommendations
+      if (predictiveRecommendations) {
+        // Find matching predictions
+        const matchingPrediction = predictiveRecommendations.predictions.find(pred =>
+          topicLower.includes(pred.contentTopic.toLowerCase()) ||
+          pred.contentTopic.toLowerCase().includes(topicLower)
+        );
+
+        if (matchingPrediction) {
+          marketScore += matchingPrediction.predictedPerformance * 0.4;
+          topic.predictedPerformance = matchingPrediction.predictedPerformance;
+          topic.optimalContentType = matchingPrediction.contentType;
+          topic.bestPerformingTone = matchingPrediction.recommendedTone;
+          marketReasons.push(`Predicted high performance: ${matchingPrediction.predictedPerformance}%`);
+        }
+
+        // Apply strategic insights
+        const relevantInsight = predictiveRecommendations.strategicInsights.find(insight =>
+          insight.impact === 'high' || insight.impact === 'critical'
+        );
+
+        if (relevantInsight) {
+          marketScore += 10;
+          marketReasons.push(`Strategic opportunity: ${relevantInsight.insight}`);
+        }
+      }
+
+      // Apply market insights
+      if (marketInsights) {
+        const highImpactInsights = marketInsights.filter(insight =>
+          insight.impact === 'high' || insight.impact === 'critical'
+        );
+
+        if (highImpactInsights.length > 0) {
+          marketScore += highImpactInsights.length * 5;
+          marketReasons.push(`${highImpactInsights.length} high-impact market insights applied`);
+        }
+      }
+
+      // Update topic with market intelligence
+      return {
+        ...topic,
+        personalizedScore: (topic.personalizedScore || 0) + marketScore,
+        predictedPerformance: Math.min(100, topic.predictedPerformance || 50),
+        personalizationReasons: [
+          ...(topic.personalizationReasons || []),
+          ...marketReasons
+        ],
+        source: marketScore > 30 ? 'market_intelligence' : topic.source
+      };
+    }).sort((a, b) => {
+      // Sort by combined personalization and market scores
+      const scoreA = (a.personalizedScore || 0) + (a.predictedPerformance || 0) * 0.7;
+      const scoreB = (b.personalizedScore || 0) + (b.predictedPerformance || 0) * 0.7;
+      return scoreB - scoreA;
+    });
   }
 }
 

@@ -19,6 +19,7 @@ import {
   Sparkles,
   Zap,
 } from 'lucide-react';
+import { type DetailedLocation } from '@/lib/seo/location-service';
 
 interface TopicGenerationResult {
   inputTopic: string;
@@ -90,6 +91,7 @@ function SEOGeneratorContent() {
   });
   const [primaryWebsiteUrl, setPrimaryWebsiteUrl] = useState('');
   const [currentCompetitorUrl, setCurrentCompetitorUrl] = useState('');
+  const [currentDetailedLocation, setCurrentDetailedLocation] = useState<DetailedLocation | null>(null);
 
   // Fetch usage stats and primary website URL on component mount
   useEffect(() => {
@@ -145,13 +147,18 @@ function SEOGeneratorContent() {
     location?: string;
     competitorUrl?: string;
     websiteUrl?: string;
+    detailedLocation?: DetailedLocation;
+    forceRecrawl?: boolean;
   }) => {
     setIsGenerating(true);
     setError(null);
 
-    // Store the competitor URL for use in advanced settings
+    // Store the competitor URL and detailed location for use in advanced settings
     if (formData.competitorUrl) {
       setCurrentCompetitorUrl(formData.competitorUrl);
+    }
+    if (formData.detailedLocation) {
+      setCurrentDetailedLocation(formData.detailedLocation);
     }
 
     try {
@@ -224,6 +231,7 @@ function SEOGeneratorContent() {
           businessType: currentResult?.metadata.businessType,
           targetAudience: currentResult?.metadata.targetAudience,
           location: currentResult?.metadata.location,
+          detailedLocation: currentDetailedLocation,
         }),
       });
 
@@ -271,6 +279,7 @@ function SEOGeneratorContent() {
             businessType: currentResult?.metadata.businessType,
             targetAudience: currentResult?.metadata.targetAudience,
             location: currentResult?.metadata.location,
+            detailedLocation: currentDetailedLocation,
           }),
         })
       );

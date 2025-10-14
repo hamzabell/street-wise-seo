@@ -5,10 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Info, Globe, Save, Search, BarChart3, Trash2, AlertTriangle, Sparkles } from 'lucide-react';
+import { Info, Globe, Save, Search, BarChart3, Trash2, AlertTriangle } from 'lucide-react';
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { SetupWizard } from '@/components/ui/setup-wizard';
 
 function WebsiteConfigurationCard() {
   // Separate states for saved website URL and input field
@@ -656,55 +655,10 @@ function WebsiteConfigurationCard() {
   );
 }
 
-function SetupWizardCard() {
-  const [showWizard, setShowWizard] = useState(false);
-
-  return (
-    <>
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5" />
-            Setup Wizard
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <p className="text-sm text-gray-600">
-              Want to go through the setup process again? You can revisit the setup wizard to configure your website, business information, and generate your first SEO topics.
-            </p>
-            <div className="flex items-center space-x-2 text-blue-600 bg-blue-50 p-4 rounded-lg">
-              <Info className="h-5 w-5" />
-              <p className="text-sm">
-                This is helpful if you want to update your business information, add a new website, or complete any setup steps you may have skipped.
-              </p>
-            </div>
-            <Button
-              onClick={() => setShowWizard(true)}
-              className="w-full"
-            >
-              <Sparkles className="h-4 w-4 mr-2" />
-              Revisit Setup Wizard
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <SetupWizard
-        isOpen={showWizard}
-        onComplete={() => {
-          setShowWizard(false);
-          window.location.reload(); // Reload to update any UI changes
-        }}
-        onClose={() => setShowWizard(false)}
-      />
-    </>
-  );
-}
 
 export default function SecurityPage() {
   return (
-    <section className="flex-1 p-4 lg:p-8">
+    <section className="flex-1 p-4 lg:p-8 mobile-content-safe">
       <h1 className="text-lg lg:text-2xl font-medium bold text-gray-900 mb-8">
         Security Settings
       </h1>
@@ -713,8 +667,6 @@ export default function SecurityPage() {
         <Suspense fallback={<div>Loading website configuration...</div>}>
           <WebsiteConfigurationCard />
         </Suspense>
-
-        <SetupWizardCard />
 
         <Card>
           <CardHeader>

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { MobileBottomNav } from '@/components/ui/mobile-bottom-nav';
-import { Users, Shield, Wand2, Building, Menu, Bookmark, Plus } from 'lucide-react';
+import { Users, Shield, Wand2, Menu, Bookmark, Plus } from 'lucide-react';
 
 export default function DashboardLayout({
   children
@@ -73,7 +73,7 @@ export default function DashboardLayout({
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto pt-20 lg:pt-0 pb-16 lg:pb-0 scrollbar-hide">
+      <main className="flex-1 overflow-y-auto pt-20 lg:pt-0 pb-20 lg:pb-0 scrollbar-hide">
         <div className="p-4 lg:p-6 h-full">
           {children}
         </div>

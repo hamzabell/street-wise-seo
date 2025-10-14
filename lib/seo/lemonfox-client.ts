@@ -3,6 +3,17 @@
  */
 
 import { cleanMarkdown, cleanTopicList, extractCleanJson, parseAndCleanStructuredResponse, cleanAIResponse, cleanTopicTitle } from './markdown-parser';
+import { detectLocationCharacteristics, generateLocationAwarePrompt } from './location-awareness';
+import { extractBusinessOfferings, type BusinessOfferings } from './service-extractor';
+import { analyzeBrandVoice, type BrandAnalysisInsights } from './brand-voice-analyzer';
+import { analyzeCompetitors, type CompetitiveIntelligenceReport } from './competitor-intelligence';
+import {
+  generateCulturalAdaptation,
+  detectLanguageFromLocation,
+  validateCulturalRequest,
+  type CulturalAdaptationRequest,
+  type CulturalPrompt
+} from './cultural-language-system';
 
 export interface LemonfoxGenerationRequest {
   model: string;
@@ -38,6 +49,15 @@ export interface LemonfoxError {
     type: string;
     code?: string;
   };
+}
+
+export interface CulturalGenerationRequest {
+  location?: string;
+  languagePreference: 'english' | 'native' | 'cultural_english';
+  formalityLevel: 'formal' | 'professional' | 'casual' | 'slang_heavy';
+  contentPurpose: 'marketing' | 'educational' | 'conversational' | 'technical';
+  targetAudience: string;
+  businessType?: string;
 }
 
 export class LemonfoxClient {
@@ -86,14 +106,90 @@ export class LemonfoxClient {
     websiteAnalysis?: any,
     contentAnalysis?: any,
     industryId?: string,
-    seasonalTopics?: string[]
+    seasonalTopics?: string[],
+    competitorWebsites?: any[],
+    competitorIntelligence?: CompetitiveIntelligenceReport,
+    culturalRequest?: CulturalGenerationRequest
   ): Promise<Array<{
     topic: string;
     reasoning: string;
-    source: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity';
+    source: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity' | 'market_opportunity' | 'competitive_gap';
     relatedContent?: string;
+    competitiveInsight?: string;
+    marketPositioning?: string;
   }>> {
-    const systemPrompt = `You are an SEO topic generator for small local service businesses. Generate practical topics that customers actually search for.
+    // Get location characteristics for enhanced context
+    const locationCharacteristics = location ? detectLocationCharacteristics(location) : null;
+    const locationContext = locationCharacteristics ?
+      generateLocationAwarePrompt(location!, locationCharacteristics, businessType) : '';
+
+    // Generate cultural adaptation if requested
+    let culturalPrompt: CulturalPrompt | null = null;
+    if (culturalRequest && location) {
+      const validatedRequest = validateCulturalRequest({
+        ...culturalRequest,
+        location,
+        targetAudience,
+        businessType
+      });
+      culturalPrompt = generateCulturalAdaptation(validatedRequest);
+      console.log('🌍 [LEMONFOX] Cultural adaptation generated:', {
+        location,
+        languagePreference: culturalRequest.languagePreference,
+        formalityLevel: culturalRequest.formalityLevel
+      });
+    }
+
+    // Extract detailed business offerings from website analysis
+    let businessOfferings: BusinessOfferings | null = null;
+    let brandAnalysis: BrandAnalysisInsights | null = null;
+    let competitiveIntel: CompetitiveIntelligenceReport | null = null;
+
+    if (websiteAnalysis) {
+      try {
+        businessOfferings = extractBusinessOfferings(websiteAnalysis);
+        console.log('🏢 [LEMONFOX] Business offerings extracted:', {
+          servicesCount: businessOfferings.services.length,
+          productsCount: businessOfferings.products.length,
+          businessType: businessOfferings.businessType,
+          primaryCategories: businessOfferings.primaryCategories
+        });
+
+        // Analyze brand voice for enhanced personalization
+        brandAnalysis = analyzeBrandVoice(websiteAnalysis);
+        console.log('🎯 [LEMONFOX] Brand voice analysis completed:', {
+          primaryTone: brandAnalysis.brandVoiceProfile.primaryTone,
+          formalityLevel: brandAnalysis.brandVoiceProfile.formalityLevel,
+          keyPhrasesCount: brandAnalysis.brandVoiceProfile.keyPhrases.length,
+          uniqueTermsCount: brandAnalysis.brandVoiceProfile.uniqueTerminology.length
+        });
+
+        // Analyze competitors for strategic intelligence
+        if (competitorWebsites && competitorWebsites.length > 0) {
+          if (competitorIntelligence) {
+            competitiveIntel = competitorIntelligence;
+            console.log('🏁 [LEMONFOX] Using provided competitor intelligence:', {
+              competitorsAnalyzed: competitiveIntel.primaryCompetitors.length,
+              marketSize: competitiveIntel.marketAnalysis.totalMarketSize,
+              contentGaps: competitiveIntel.competitiveGaps.contentGaps.length
+            });
+          } else {
+            competitiveIntel = await analyzeCompetitors(websiteAnalysis, competitorWebsites, businessType, location);
+            console.log('🏁 [LEMONFOX] Competitor intelligence analysis completed:', {
+              competitorsAnalyzed: competitiveIntel.primaryCompetitors.length,
+              marketSize: competitiveIntel.marketAnalysis.totalMarketSize,
+              contentGaps: competitiveIntel.competitiveGaps.contentGaps.length,
+              strategicRecs: competitiveIntel.strategicRecommendations.contentStrategy.length
+            });
+          }
+        }
+      } catch (error) {
+        console.error('❌ [LEMONFOX] Failed to extract business offerings, brand voice, or competitor intelligence:', error);
+      }
+    }
+
+    // Build enhanced system prompt with brand voice context
+    let systemPrompt = `You are an SEO topic generator for small local service businesses. Generate practical topics that customers actually search for.
 
 CRITICAL RULES:
 - Respond with ONLY a numbered list of topics and their reasoning
@@ -107,26 +203,236 @@ CRITICAL RULES:
 - Focus on local search and practical customer problems
 - Include seasonal topics when relevant
 - Emphasize voice search and mobile-friendly topics
-- Source must be one of: website_gap, competitor_advantage, content_opportunity, ai
+- Source must be one of: website_gap, competitor_advantage, content_opportunity, ai`;
 
-IMPORTANT: Focus on small business needs:
-- Generate topics that address real customer pain points
-- Include local search variations ("plumber near me", "best electrician in [city]")
-- Consider voice search queries ("How to fix...", "Where can I find...")
-- Emphasize action-oriented and educational content
-- Topics should help small businesses attract local customers
+    // Add brand voice requirements if available
+    if (brandAnalysis) {
+      const { brandVoiceProfile } = brandAnalysis;
+      systemPrompt += `
+
+BRAND VOICE REQUIREMENTS:
+- Match the ${brandVoiceProfile.primaryTone} tone of the business
+- Use ${brandVoiceProfile.formalityLevel} language consistently
+- Write with ${brandVoiceProfile.complexityLevel} complexity
+- Use ${brandVoiceProfile.sentenceStructure} sentence structures
+- Adopt a ${brandVoiceProfile.perspective} perspective
+- Incorporate key phrases naturally: ${brandVoiceProfile.keyPhrases.slice(0, 5).join(', ')}
+- Use brand terminology: ${brandVoiceProfile.uniqueTerminology.slice(0, 3).join(', ')}
+- Reflect core values: ${brandVoiceProfile.coreValues.slice(0, 3).join(', ')}`;
+    }
+
+    // Add competitor intelligence requirements if available
+    if (competitiveIntel) {
+      const { marketAnalysis, competitiveGaps, strategicRecommendations, swotAnalysis } = competitiveIntel;
+      systemPrompt += `
+
+COMPETITIVE INTELLIGENCE REQUIREMENTS:
+- Market size: ${marketAnalysis.totalMarketSize} estimated monthly searches
+- Market leaders: ${marketAnalysis.marketLeaders.join(', ')}
+- Emerging trends: ${marketAnalysis.emergingTrends.slice(0, 3).join(', ')}
+- Content gaps to target: ${competitiveGaps.contentGaps.slice(0, 4).join(', ')}
+- Strategic focus: ${strategicRecommendations.topicPriorities.slice(0, 3).join(', ')}
+
+COMPETITIVE POSITIONING:
+- Strengths to leverage: ${swotAnalysis.strengths.slice(0, 2).join(', ')}
+- Opportunities to pursue: ${swotAnalysis.opportunities.slice(0, 2).join(', ')}
+- Competitive advantages: ${strategicRecommendations.differentiationTactics.slice(0, 2).join(', ')}
+
+ADVANCED TOPIC SOURCES:
+- market_opportunity: Topics based on emerging market trends
+- competitive_gap: Topics that competitors are missing but market wants
+- strategic_positioning: Topics that leverage your unique strengths`;
+    }
+
+    // Add cultural adaptation instructions if available
+    if (culturalPrompt) {
+      systemPrompt += `
+
+${culturalPrompt.languageInstructions}
+
+${culturalPrompt.culturalInstructions}
+
+${culturalPrompt.formalityGuidelines}
+
+${culturalPrompt.slangGuidelines}
+
+CRITICAL CULTURAL REQUIREMENTS:
+- Generate topics that resonate with local cultural values and communication styles
+- Use appropriate level of formality for the target audience
+- Incorporate local slang and expressions naturally where appropriate
+- Reference local cultural events, seasons, and context
+- Avoid culturally inappropriate topics or expressions
+- Consider local business practices and customer expectations
+
+CULTURAL EXAMPLES TO FOLLOW:
+${culturalPrompt.examples.slice(0, 3).map(example => `- ${example}`).join('\n')}
+
+TOPICS TO AVOID:
+${culturalPrompt.avoidances.slice(0, 5).map(avoidance => `- ${avoidance}`).join('\n')}`;
+    }
+
+    systemPrompt += `
+
+IMPORTANT: Focus on the business's ACTUAL services and products:
+- Generate topics specifically related to the services/products the business offers
+- Reference specific service features, benefits, and use cases
+- Create topics that address customer problems solved by their offerings
+- Include comparison topics for their specific services vs alternatives
+- Emphasize their unique value propositions and differentiators
+- Topics should help the business attract customers for their specific offerings
+
+SERVICE-SPECIFIC REQUIREMENTS:
+- Each topic should be directly relevant to at least one service/product offered
+- Include topics that explain the value and benefits of specific services
+- Create "how-to" topics for problems their services solve
+- Generate comparison topics for their service categories
+- Include location-specific variations of their service offerings
+- Address emergency/urgent needs for services they provide
+
+LOCATION-AWARENESS REQUIREMENTS:
+- Use local terminology and cultural references naturally
+- Consider seasonal patterns relevant to the location (no winter topics for tropical climates)
+- Address infrastructure challenges and local pain points
+- Reflect local business practices and customer expectations
+- Avoid generic topics that don't match the location's reality
 
 Sources:
-- website_gap: Addresses missing content for local customers
-- competitor_advantage: Helps compete with local competitors
-- content_opportunity: Builds on existing local business content
-- ai: General small business topic suggestion`;
+- website_gap: Addresses missing content for their specific services
+- competitor_advantage: Helps compete with local competitors for their services
+- content_opportunity: Builds on their existing service content
+- market_opportunity: Topics based on emerging market trends and opportunities
+- competitive_gap: Topics that competitors are missing but market wants
+- strategic_positioning: Topics that leverage your unique strengths
+- ai: General service-related topic suggestion`;
 
     let prompt = `Business: ${businessType}
 Audience: ${targetAudience}${location ? `\nLocation: ${location}` : ''}
 Base topic: ${topic}${seasonalTopics && seasonalTopics.length > 0 ? `\nSeasonal Focus: ${seasonalTopics.slice(0, 3).join(', ')}` : ''}`;
 
-    // Add website-specific context if available
+    // Add location-aware context if available
+    if (locationContext) {
+      prompt += `
+${locationContext}`;
+    }
+
+    // Add brand voice context to the main prompt
+    if (brandAnalysis) {
+      const { brandVoiceProfile, personalizationRecommendations } = brandAnalysis;
+      prompt += `
+
+BRAND VOICE CONTEXT:
+**Primary Tone:** ${brandVoiceProfile.primaryTone}
+**Language Style:** ${brandVoiceProfile.formalityLevel} and ${brandVoiceProfile.complexityLevel}
+**Key Brand Phrases:** ${brandVoiceProfile.keyPhrases.slice(0, 6).join(', ')}
+**Unique Terminology:** ${brandVoiceProfile.uniqueTerminology.slice(0, 4).join(', ')}
+**Core Values:** ${brandVoiceProfile.coreValues.join(', ')}
+**Communication Perspective:** ${brandVoiceProfile.perspective}
+
+**TOPIC GENERATION BRAND REQUIREMENTS:**
+${personalizationRecommendations.topicGeneration.map(rec => `- ${rec}`).join('\n')}`;
+    }
+
+    // Add competitor intelligence context to the main prompt
+    if (competitiveIntel) {
+      const { marketAnalysis, competitiveGaps, strategicRecommendations, swotAnalysis } = competitiveIntel;
+      prompt += `
+
+COMPETITIVE INTELLIGENCE CONTEXT:
+**Market Leaders:** ${marketAnalysis.marketLeaders.join(', ')}
+**Emerging Trends:** ${marketAnalysis.emergingTrends.slice(0, 4).join(', ')}
+**Content Gaps to Target:** ${competitiveGaps.contentGaps.slice(0, 5).join(', ')}
+**Service Gaps:** ${competitiveGaps.serviceGaps.slice(0, 3).join(', ')}
+**Strategic Topic Priorities:** ${strategicRecommendations.topicPriorities.slice(0, 4).join(', ')}
+
+**COMPETITIVE ADVANTAGES:**
+${strategicRecommendations.differentiationTactics.map(rec => `- ${rec}`).join('\n')}
+
+**MARKET OPPORTUNITIES:**
+${swotAnalysis.opportunities.slice(0, 4).map(opp => `- ${opp}`).join('\n')}
+
+**COMPETITIVE TOPIC REQUIREMENTS:**
+- Generate topics that address identified content gaps
+- Create content that leverages your strengths against competitor weaknesses
+- Focus on emerging trends that competitors haven't capitalized on
+- Develop topics that highlight your unique value propositions`;
+    }
+
+    // Add detailed business offerings context if available
+    if (businessOfferings) {
+      const servicesList = businessOfferings.services.slice(0, 8).map(s =>
+        `- ${s.name} (${s.category}): ${s.description}${s.urgencyLevel === 'emergency' ? ' [EMERGENCY]' : ''}`
+      ).join('\n');
+
+      const productsList = businessOfferings.products.slice(0, 5).map(p =>
+        `- ${p.name} (${p.category}): ${p.description}`
+      ).join('\n');
+
+      prompt += `
+
+BUSINESS OFFERINGS ANALYSIS:
+**Business Type:** ${businessOfferings.businessType}
+**Primary Categories:** ${businessOfferings.primaryCategories.join(', ')}
+**Target Audiences:** ${businessOfferings.targetAudiences.join(', ')}
+**Value Propositions:** ${businessOfferings.valuePropositions.join(', ')}
+**Unique Selling Points:** ${businessOfferings.uniqueSellingPoints.join(', ')}
+
+**SERVICES OFFERED:**
+${servicesList || 'No specific services identified'}
+
+**PRODUCTS OFFERED:**
+${productsList || 'No specific products identified'}
+
+**EMERGENCY SERVICES:**
+${businessOfferings.emergencyServices.length > 0 ? businessOfferings.emergencyServices.join(', ') : 'No emergency services'}
+
+**SERVICE AREAS:**
+${businessOfferings.serviceAreas.join(', ') || 'Local service area'}
+
+**SERVICE GENERATION REQUIREMENTS:**
+- Generate topics specifically for the services and products listed above
+- Reference specific service features, benefits, and use cases in your reasoning
+- Create topics that address customer problems solved by these specific offerings
+- Include comparison topics for their services vs alternatives
+- Emphasize their unique value propositions and differentiators
+- For emergency services, include urgent/emergency topic variations
+- All topics must be directly relevant to at least one offering above`;
+    }
+
+    // Extract competitor business offerings if competitor analysis is available
+    let competitorOfferings: BusinessOfferings | null = null;
+    if (contentAnalysis?.competitorAnalysis && websiteAnalysis?.crawledPages) {
+      try {
+        // Create a mock website analysis for competitor to extract their offerings
+        // In a real implementation, you'd have separate competitor website analysis data
+        const competitorKeywords = contentAnalysis.competitorAnalysis.missingTopics || [];
+        if (competitorKeywords.length > 0) {
+          // Create a simplified competitor offerings analysis based on their topics
+          competitorOfferings = {
+            services: competitorKeywords.slice(0, 5).map((topic: string) => ({
+              name: topic,
+              category: 'unknown',
+              description: `Service identified from competitor analysis`,
+              targetAudience: ['business customers'],
+              features: [],
+              urgencyLevel: 'routine' as const,
+              localService: false
+            })),
+            products: [],
+            businessType: 'competitor business',
+            primaryCategories: ['services'],
+            valuePropositions: [],
+            targetAudiences: ['customers'],
+            serviceAreas: [],
+            emergencyServices: [],
+            uniqueSellingPoints: []
+          };
+        }
+      } catch (error) {
+        console.error('❌ [LEMONFOX] Failed to extract competitor offerings:', error);
+      }
+    }
+
+    // Add website-specific context if available (content analysis)
     if (websiteAnalysis && contentAnalysis) {
       const gaps = contentAnalysis.contentGaps?.slice(0, 5).map((gap: any) =>
         `${gap.topic}: ${gap.reason} (priority: ${gap.priority})`
@@ -144,27 +450,40 @@ Base topic: ${topic}${seasonalTopics && seasonalTopics.length > 0 ? `\nSeasonal 
 
       prompt += `
 
-WEBSITE ANALYSIS RESULTS:
-**YOUR WEBSITE (${websiteAnalysis.domain}):**
-- Pages crawled: ${websiteAnalysis.crawledPages?.length || 0}
-- Current topics: ${existingTopics}
-- Total words analyzed: ${websiteAnalysis.totalWordCount || 0}
+WEBSITE CONTENT ANALYSIS:
+**Current Content Topics:** ${existingTopics}
+**High Priority Content Gaps:** ${highPriorityTopics || 'None identified'}
+**Content Gaps:** ${gaps || 'None identified'}
+**Keyword Opportunities:** ${opportunities || 'No specific opportunities identified'}
 
-**MISSING CONTENT (High Priority):**
-${highPriorityTopics ? '- ' + contentAnalysis.contentGaps.filter((gap: any) => gap.priority === 'high')
-        .map((gap: any) => `${gap.topic}: ${gap.reason}`).join('\n- ') : 'None identified'}
+**CONTENT REQUIREMENTS:**
+- Generate topics that address the specific content gaps identified
+- Reference existing content to build comprehensive topic clusters
+- Target keyword opportunities with relevant, service-specific content`;
+    }
 
-**ALL CONTENT GAPS:**
-${gaps || 'None identified'}
+    // Add competitor analysis if available
+    if (competitorOfferings || contentAnalysis?.competitorAnalysis) {
+      const competitorServices = competitorOfferings?.services.slice(0, 5).map(s =>
+        `- ${s.name}: ${s.description}`
+      ).join('\n') || '';
 
-**COMPETITOR ADVANTAGES:**
-${competitorGaps || 'No competitor analysis available'}
+      const competitorAdvantages = contentAnalysis?.competitorAnalysis?.opportunities?.slice(0, 3).join('\n- ') || '';
 
-**KEYWORD OPPORTUNITIES:**
-${opportunities || 'No specific opportunities identified'}
+      prompt += `
 
-**ACTIONABLE INSIGHTS:**
-Generate topics that specifically address the gaps and opportunities above. Reference specific findings in your reasoning.`;
+COMPETITOR ANALYSIS:
+**Competitor Services/Topics:**
+${competitorServices || contentAnalysis?.competitorAnalysis?.missingTopics?.slice(0, 5).map((t: string) => `- ${t}`).join('\n') || 'No specific competitor services identified'}
+
+**Competitor Advantages to Address:**
+${competitorAdvantages ? '- ' + competitorAdvantages : 'No specific advantages identified'}
+
+**COMPETITIVE REQUIREMENTS:**
+- Create topics that help compete with competitor offerings
+- Address gaps where competitors have content but you don't
+- Emphasize your unique value propositions compared to competitors
+- Generate comparison topics that highlight your advantages`;
     }
 
     prompt += `

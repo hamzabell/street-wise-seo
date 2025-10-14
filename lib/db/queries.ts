@@ -690,6 +690,7 @@ export async function createSavedTopic(data: {
   businessType?: string;
   targetAudience?: string;
   location?: string;
+  detailedLocation?: string;
   tone?: string;
   additionalContext?: string;
   websiteUrl?: string;

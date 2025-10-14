@@ -32,8 +32,24 @@ export function JobStateProvider({ children }: { children: ReactNode }) {
 
   // Connect to SSE stream
   useEffect(() => {
+    let reconnectTimeout: NodeJS.Timeout;
+    let connectionAttempts = 0;
+    const maxConnectionAttempts = 5;
+
     const connectSSE = () => {
-      console.log('🔌 [JOB STATE] Connecting to SSE stream at /api/jobs/stream');
+      connectionAttempts++;
+      console.log(`🔌 [JOB STATE] Connecting to SSE stream (attempt ${connectionAttempts}/${maxConnectionAttempts})`);
+
+      // Clear any existing timeout
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
+
+      // Stop trying after max attempts
+      if (connectionAttempts > maxConnectionAttempts) {
+        console.error('❌ [JOB STATE] Max connection attempts reached, stopping SSE connection attempts');
+        return;
+      }
 
       try {
         const es = new EventSource('/api/jobs/stream');
@@ -43,6 +59,9 @@ export function JobStateProvider({ children }: { children: ReactNode }) {
           try {
             const data = JSON.parse(event.data);
             console.log('📨 [JOB STATE] Received SSE message:', data);
+
+            // Reset connection attempts on successful message
+            connectionAttempts = 0;
 
             switch (data.type) {
               case 'connected':
@@ -74,33 +93,59 @@ export function JobStateProvider({ children }: { children: ReactNode }) {
 
         es.onerror = (error) => {
           console.error('❌ [JOB STATE] SSE connection error:', error);
-          console.log('🔄 [JOB STATE] Will attempt to reconnect in 3 seconds');
           es.close();
 
-          // Attempt to reconnect after 3 seconds
-          setTimeout(connectSSE, 3000);
+          // Exponential backoff for reconnection
+          const backoffDelay = Math.min(3000 * Math.pow(2, connectionAttempts - 1), 30000);
+          console.log(`🔄 [JOB STATE] Will attempt to reconnect in ${backoffDelay/1000}s`);
+
+          reconnectTimeout = setTimeout(connectSSE, backoffDelay);
         };
 
         es.onopen = () => {
           console.log('🔗 [JOB STATE] SSE connection opened successfully');
+          // Reset connection attempts on successful connection
+          connectionAttempts = 0;
         };
 
         // Set a timeout to check if connection was successful
-        setTimeout(() => {
+        const connectionTimeout = setTimeout(() => {
           if (es.readyState === EventSource.CONNECTING) {
             console.warn('⚠️ [JOB STATE] SSE connection still connecting after 5 seconds');
+            // Close the connection and try again if we haven't exceeded max attempts
+            es.close();
+            if (connectionAttempts < maxConnectionAttempts) {
+              reconnectTimeout = setTimeout(connectSSE, 5000);
+            } else {
+              console.error('❌ [JOB STATE] Max connection attempts reached, stopping reconnection attempts');
+            }
           }
         }, 5000);
 
+        // Clear the timeout if the connection closes or opens successfully
+        es.addEventListener('open', () => {
+          clearTimeout(connectionTimeout);
+        }, { once: true });
+
+        es.addEventListener('error', () => {
+          clearTimeout(connectionTimeout);
+        }, { once: true });
+
       } catch (error) {
         console.error('❌ [JOB STATE] Failed to create SSE connection:', error);
+        // Try again after a delay
+        reconnectTimeout = setTimeout(connectSSE, 5000);
       }
     };
 
+    // Start connection
     connectSSE();
 
     // Cleanup on unmount
     return () => {
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
       if (eventSource) {
         eventSource.close();
         console.log('🔌 [JOB STATE] SSE connection closed');

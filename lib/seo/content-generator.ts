@@ -1,4 +1,6 @@
 import { getLemonfoxClient } from './lemonfox-client';
+import { analyzeBrandVoice, type BrandAnalysisInsights } from './brand-voice-analyzer';
+import { type DetailedLocation } from './location-service';
 
 export interface ContentGenerationOptions {
   topic: string;
@@ -10,8 +12,10 @@ export interface ContentGenerationOptions {
   businessType?: string;
   targetAudience?: string;
   location?: string;
+  detailedLocation?: DetailedLocation; // Enhanced location data
   targetWordCount: number;
   tags?: string[];
+  brandVoiceAnalysis?: BrandAnalysisInsights;
 }
 
 export interface GeneratedContent {
@@ -148,8 +152,10 @@ export async function generatePersonalizedContent(options: ContentGenerationOpti
     businessType,
     targetAudience,
     location,
+    detailedLocation,
     targetWordCount,
-    tags = []
+    tags = [],
+    brandVoiceAnalysis
   } = options;
 
   const contentTypeConfig = CONTENT_TYPE_PROMPTS[contentType];
@@ -167,7 +173,10 @@ VARIANT NUMBER: ${variantNumber} of 3
 BUSINESS CONTEXT:
 - Business Type: ${businessType || 'General business'}
 - Target Audience: ${targetAudience || 'General audience'}
-${location ? `- Location: ${location}` : ''}
+${detailedLocation ? `- Location: ${detailedLocation.fullDisplay}
+${detailedLocation.searchContext ? `- Location Context: ${detailedLocation.searchContext}` : ''}
+${detailedLocation.geographicContext ? `- Cultural Context: ${detailedLocation.geographicContext}` : ''}
+${detailedLocation.localizedDescription ? `- Local Description: ${detailedLocation.localizedDescription}` : ''}` : location ? `- Location: ${location}` : ''}
 - Target Keywords: ${tags.join(', ')}
 
 TONE GUIDELINES:
@@ -177,8 +186,31 @@ Voice: ${toneGuidelines.voice}
 CONTENT STRUCTURE:
 ${contentTypeConfig.structure}`;
 
-  // Add website analysis context if available
-  if (websiteAnalysisContext) {
+  // Add enhanced brand voice context if available
+  if (brandVoiceAnalysis) {
+    const { brandVoiceProfile, personalizationRecommendations, targetLanguageStyle } = brandVoiceAnalysis;
+    prompt += `
+
+ENHANCED BRAND VOICE CONTEXT:
+**Brand Profile:** ${targetLanguageStyle}
+**Key Brand Phrases:** ${brandVoiceProfile.keyPhrases.slice(0, 8).join(', ')}
+**Unique Terminology:** ${brandVoiceProfile.uniqueTerminology.slice(0, 5).join(', ')}
+**Branded Terms:** ${brandVoiceProfile.brandedTerms.join(', ')}
+**Core Values:** ${brandVoiceProfile.coreValues.join(', ')}
+**Communication Style:** ${brandVoiceProfile.perspective} perspective, ${brandVoiceProfile.formalityLevel} formality
+**Content Preferences:** ${brandVoiceProfile.contentStructure.usesLists ? 'Uses lists and structured content' : 'Prefers narrative content'}
+
+**CONTENT CREATION REQUIREMENTS:**
+${personalizationRecommendations.contentCreation.map(rec => `- ${rec}`).join('\n')}
+
+**BRAND CONSISTENCY REQUIREMENTS:**
+${personalizationRecommendations.brandConsistency.map(rec => `- ${rec}`).join('\n')}
+
+IMPORTANT: Write content that sounds exactly like it comes from this business. Use their terminology, match their communication style, and reflect their core values naturally throughout the content.`;
+  }
+
+  // Add legacy website analysis context for backwards compatibility
+  if (websiteAnalysisContext && !brandVoiceAnalysis) {
     prompt += `
 
 WEBSITE CONTEXT FOR BRAND CONSISTENCY:

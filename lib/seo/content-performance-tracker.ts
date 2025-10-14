@@ -69,6 +69,136 @@ export interface ContentPerformanceReport {
   }>;
 }
 
+// Enhanced interfaces for performance-based personalization
+export interface UserPreferenceProfile {
+  userId: string;
+  businessId: string;
+
+  // Content preferences based on performance
+  preferredContentTypes: Record<string, {
+    count: number;
+    avgScore: number;
+    successRate: number;
+  }>;
+
+  preferredTopics: Record<string, {
+    count: number;
+    avgScore: number;
+    conversionRate: number;
+  }>;
+
+  preferredTones: Record<string, {
+    count: number;
+    avgScore: number;
+    engagementRate: number;
+  }>;
+
+  preferredLengths: Record<string, {
+    count: number;
+    avgScore: number;
+    readTime: number;
+  }>;
+
+  // Performance patterns
+  successfulPatterns: ContentPattern[];
+  unsuccessfulPatterns: ContentPattern[];
+
+  // Engagement patterns
+  peakEngagementTimes: number[];
+  preferredPublishingDays: number[];
+  seasonalPreferences: Record<string, number>;
+
+  // Learning metrics
+  totalContentAnalyzed: number;
+  accuracyScore: number;
+  lastUpdated: Date;
+  modelVersion: string;
+}
+
+export interface ContentPattern {
+  characteristics: {
+    contentType: string;
+    topicCategory: string;
+    tone: string;
+    length: number;
+    structure: string[];
+    keywords: string[];
+    multimediaElements: number;
+  };
+
+  performance: {
+    avgEngagement: number;
+    avgConversion: number;
+    avgSEO: number;
+    successRate: number;
+  };
+
+  frequency: number;
+  confidence: number;
+  predictivePower: number;
+}
+
+export interface PersonalizationInsights {
+  userProfile: UserPreferenceProfile;
+
+  // Content recommendations based on performance
+  contentRecommendations: {
+    optimalContentTypes: Array<{
+      type: string;
+      confidence: number;
+      expectedScore: number;
+      reasoning: string;
+    }>;
+
+    topicSuggestions: Array<{
+      topic: string;
+      category: string;
+      priority: number;
+      confidence: number;
+      expectedPerformance: number;
+    }>;
+
+    toneRecommendations: Array<{
+      tone: string;
+      usage: number;
+      effectiveness: number;
+      expectedEngagement: number;
+    }>;
+
+    structuralPreferences: {
+      optimalLength: number;
+      optimalReadTime: number;
+      preferredStructure: string[];
+      multimediaNeeds: string[];
+      keywordDensity: number;
+    };
+  };
+
+  // Performance optimization recommendations
+  performanceOptimization: {
+    bestPublishingTimes: number[];
+    optimalPublishingFrequency: number;
+    seasonalAdjustments: Record<string, number>;
+    contentRefreshSchedule: Record<string, number>;
+  };
+
+  // Strategic guidance
+  strategicGuidance: {
+    focusAreas: string[];
+    avoidAreas: string[];
+    competitiveAdvantages: string[];
+    growthOpportunities: string[];
+  };
+
+  // Predictive insights
+  predictiveAnalytics: {
+    nextQuarterPerformance: number;
+    contentSuccessProbability: number;
+    recommendedContentMix: Record<string, number>;
+    riskFactors: string[];
+  };
+}
+
 export class ContentPerformanceTracker {
   /**
    * Generate comprehensive content performance report
@@ -658,6 +788,613 @@ export class ContentPerformanceTracker {
     const totalScore = contentMetrics.reduce((sum, cm) => sum + cm.overallScore, 0);
     return Math.round(totalScore / contentMetrics.length);
   }
+
+  // ===================
+  // PERSONALIZATION METHODS
+  // ===================
+
+  /**
+   * Generate personalized insights based on user's content performance history
+   */
+  async generatePersonalizationInsights(
+    userId: string,
+    businessId: string,
+    contentHistory?: ContentPerformanceMetrics[],
+    performanceData?: any[]
+  ): Promise<PersonalizationInsights> {
+    console.log(`🎯 [PERSONALIZATION] Generating insights for user: ${userId}, business: ${businessId}`);
+
+    // Get or create user preference profile
+    const userProfile = await this.getUserPreferenceProfile(userId, businessId, contentHistory);
+
+    // Analyze performance patterns
+    await this.analyzePerformancePatterns(userProfile, contentHistory, performanceData);
+
+    // Generate personalization insights
+    const insights = await this.generatePersonalizationRecommendations(userProfile);
+
+    console.log(`✅ [PERSONALIZATION] Insights generated for ${userId}`, {
+      optimalContentTypes: insights.contentRecommendations.optimalContentTypes.length,
+      topicSuggestions: insights.contentRecommendations.topicSuggestions.length,
+      accuracyScore: userProfile.accuracyScore
+    });
+
+    return insights;
+  }
+
+  /**
+   * Get user preference profile, creating one if it doesn't exist
+   */
+  private async getUserPreferenceProfile(
+    userId: string,
+    businessId: string,
+    contentHistory?: ContentPerformanceMetrics[]
+  ): Promise<UserPreferenceProfile> {
+    // Check cache first (in a real implementation, this would check database)
+    const cacheKey = `${userId}_${businessId}`;
+    let profile = this.getUserProfileFromCache(cacheKey);
+
+    if (!profile) {
+      profile = await this.createUserProfile(userId, businessId, contentHistory);
+      this.cacheUserProfile(cacheKey, profile);
+    }
+
+    // Update profile with new content data if available
+    if (contentHistory && contentHistory.length > 0) {
+      profile = await this.updateUserProfileWithNewData(profile, contentHistory);
+      this.cacheUserProfile(cacheKey, profile);
+    }
+
+    return profile;
+  }
+
+  /**
+   * Create new user preference profile
+   */
+  private async createUserProfile(
+    userId: string,
+    businessId: string,
+    contentHistory?: ContentPerformanceMetrics[]
+  ): Promise<UserPreferenceProfile> {
+    const profile: UserPreferenceProfile = {
+      userId,
+      businessId,
+      preferredContentTypes: {},
+      preferredTopics: {},
+      preferredTones: {},
+      preferredLengths: {},
+      successfulPatterns: [],
+      unsuccessfulPatterns: [],
+      peakEngagementTimes: [9, 14, 19], // Default business hours
+      preferredPublishingDays: [1, 2, 3, 4], // Monday-Thursday
+      seasonalPreferences: {
+        spring: 25,
+        summer: 25,
+        fall: 25,
+        winter: 25
+      },
+      totalContentAnalyzed: contentHistory?.length || 0,
+      accuracyScore: 0.75, // Start with 75% accuracy
+      lastUpdated: new Date(),
+      modelVersion: '1.0.0'
+    };
+
+    // Analyze existing content history if available
+    if (contentHistory && contentHistory.length > 0) {
+      await this.analyzeInitialContentPatterns(profile, contentHistory);
+    }
+
+    return profile;
+  }
+
+  /**
+   * Analyze initial content patterns from existing history
+   */
+  private async analyzeInitialContentPatterns(
+    profile: UserPreferenceProfile,
+    contentHistory: ContentPerformanceMetrics[]
+  ): Promise<void> {
+    contentHistory.forEach(content => {
+      // Analyze content type preferences
+      const contentType = this.inferContentType(content);
+      this.updateContentTypePreference(profile, contentType, content);
+
+      // Analyze topic preferences
+      const topicCategory = this.inferTopicCategory(content);
+      this.updateTopicPreference(profile, topicCategory, content);
+
+      // Analyze length preferences
+      const lengthCategory = this.categorizeContentLength(content.wordCount);
+      this.updateLengthPreference(profile, lengthCategory, content);
+
+      // Analyze tone preferences (would need NLP analysis)
+      const tone = this.inferContentTone(content);
+      this.updateTonePreference(profile, tone, content);
+
+      // Create content patterns
+      const pattern = this.createContentPattern(content);
+      if (content.overallScore >= 70) {
+        profile.successfulPatterns.push(pattern);
+      } else {
+        profile.unsuccessfulPatterns.push(pattern);
+      }
+    });
+
+    // Calculate initial accuracy based on pattern performance
+    profile.accuracyScore = this.calculateProfileAccuracy(profile);
+  }
+
+  /**
+   * Update user profile with new content performance data
+   */
+  private async updateUserProfileWithNewData(
+    profile: UserPreferenceProfile,
+    contentHistory: ContentPerformanceMetrics[]
+  ): Promise<UserPreferenceProfile> {
+    contentHistory.forEach(content => {
+      // Update preferences with new data
+      const contentType = this.inferContentType(content);
+      this.updateContentTypePreference(profile, contentType, content);
+
+      const topicCategory = this.inferTopicCategory(content);
+      this.updateTopicPreference(profile, topicCategory, content);
+
+      const lengthCategory = this.categorizeContentLength(content.wordCount);
+      this.updateLengthPreference(profile, lengthCategory, content);
+
+      const tone = this.inferContentTone(content);
+      this.updateTonePreference(profile, tone, content);
+
+      // Update content patterns
+      const pattern = this.createContentPattern(content);
+      this.updateContentPatterns(profile, pattern);
+
+      // Update engagement patterns
+      this.updateEngagementPatterns(profile, content);
+    });
+
+    profile.totalContentAnalyzed += contentHistory.length;
+    profile.lastUpdated = new Date();
+
+    // Recalculate accuracy
+    profile.accuracyScore = this.calculateProfileAccuracy(profile);
+
+    return profile;
+  }
+
+  /**
+   * Analyze performance patterns and update insights
+   */
+  private async analyzePerformancePatterns(
+    profile: UserPreferenceProfile,
+    contentHistory?: ContentPerformanceMetrics[],
+    performanceData?: any[]
+  ): Promise<void> {
+    // Analyze successful vs unsuccessful patterns
+    this.updatePatternPredictions(profile);
+
+    // Identify high-performing characteristics
+    this.identifyHighPerformanceCharacteristics(profile);
+
+    // Update confidence scores
+    this.updatePredictionConfidence(profile);
+  }
+
+  /**
+   * Generate personalization recommendations based on user profile
+   */
+  private async generatePersonalizationRecommendations(profile: UserPreferenceProfile): Promise<PersonalizationInsights> {
+    return {
+      userProfile: profile,
+      contentRecommendations: {
+        optimalContentTypes: this.getOptimalContentTypes(profile),
+        topicSuggestions: this.getTopicSuggestions(profile),
+        toneRecommendations: this.getToneRecommendations(profile),
+        structuralPreferences: this.getStructuralPreferences(profile)
+      },
+      performanceOptimization: {
+        bestPublishingTimes: profile.peakEngagementTimes,
+        optimalPublishingFrequency: this.calculateOptimalFrequency(profile),
+        seasonalAdjustments: profile.seasonalPreferences,
+        contentRefreshSchedule: this.generateRefreshSchedule(profile)
+      },
+      strategicGuidance: {
+        focusAreas: this.getFocusAreas(profile),
+        avoidAreas: this.getAvoidAreas(profile),
+        competitiveAdvantages: this.getCompetitiveAdvantages(profile),
+        growthOpportunities: this.getGrowthOpportunities(profile)
+      },
+      predictiveAnalytics: {
+        nextQuarterPerformance: this.predictNextQuarterPerformance(profile),
+        contentSuccessProbability: this.calculateSuccessProbability(profile),
+        recommendedContentMix: this.getRecommendedContentMix(profile),
+        riskFactors: this.identifyRiskFactors(profile)
+      }
+    };
+  }
+
+  // Helper methods for preference analysis
+  private inferContentType(content: ContentPerformanceMetrics): string {
+    const title = content.title.toLowerCase();
+    const url = content.url.toLowerCase();
+
+    if (title.includes('blog') || url.includes('/blog/')) return 'blog_post';
+    if (title.includes('guide') || title.includes('how to')) return 'guide';
+    if (title.includes('service') || title.includes('about')) return 'service_page';
+    if (title.includes('contact') || title.includes('quote')) return 'conversion_page';
+    if (title.includes('portfolio') || title.includes('work')) return 'portfolio';
+
+    return 'general_content';
+  }
+
+  private inferTopicCategory(content: ContentPerformanceMetrics): string {
+    const title = content.title.toLowerCase();
+    const url = content.url.toLowerCase();
+
+    if (title.includes('plumbing') || url.includes('plumbing')) return 'plumbing';
+    if (title.includes('hvac') || title.includes('air conditioning')) return 'hvac';
+    if (title.includes('electrical') || title.includes('electrician')) return 'electrical';
+    if (title.includes('cleaning') || title.includes('janitorial')) return 'cleaning';
+    if (title.includes('landscaping') || title.includes('lawn')) return 'landscaping';
+    if (title.includes('roofing') || title.includes('roofer')) return 'roofing';
+
+    return 'general_service';
+  }
+
+  private categorizeContentLength(wordCount: number): string {
+    if (wordCount < 300) return 'short';
+    if (wordCount < 800) return 'medium';
+    if (wordCount < 1500) return 'long';
+    return 'extended';
+  }
+
+  private inferContentTone(content: ContentPerformanceMetrics): string {
+    const title = content.title.toLowerCase();
+
+    if (title.includes('professional') || title.includes('expert')) return 'professional';
+    if (title.includes('guide') || title.includes('tips')) return 'informative';
+    if (title.includes('best') || title.includes('top')) return 'authoritative';
+    if (title.includes('how to') || title.includes('easy')) return 'helpful';
+    if (title.includes('emergency') || title.includes('urgent')) return 'urgent';
+
+    return 'neutral';
+  }
+
+  private createContentPattern(content: ContentPerformanceMetrics): ContentPattern {
+    return {
+      characteristics: {
+        contentType: this.inferContentType(content),
+        topicCategory: this.inferTopicCategory(content),
+        tone: this.inferContentTone(content),
+        length: content.wordCount,
+        structure: ['title', 'introduction', 'main content', 'conclusion'],
+        keywords: [], // Would extract from content
+        multimediaElements: 0 // Would analyze from content
+      },
+      performance: {
+        avgEngagement: content.userEngagementEstimate,
+        avgConversion: content.trafficPotential / 100, // Simplified
+        avgSEO: content.topicalRelevanceScore,
+        successRate: content.overallScore > 70 ? 1 : 0
+      },
+      frequency: 1,
+      confidence: 0.5,
+      predictivePower: 0.3
+    };
+  }
+
+  private updateContentTypePreference(profile: UserPreferenceProfile, contentType: string, content: ContentPerformanceMetrics): void {
+    if (!profile.preferredContentTypes[contentType]) {
+      profile.preferredContentTypes[contentType] = {
+        count: 0,
+        avgScore: 0,
+        successRate: 0
+      };
+    }
+
+    const pref = profile.preferredContentTypes[contentType];
+    pref.count++;
+    pref.avgScore = (pref.avgScore * (pref.count - 1) + content.overallScore) / pref.count;
+    pref.successRate = (pref.successRate * (pref.count - 1) + (content.overallScore > 70 ? 1 : 0)) / pref.count;
+  }
+
+  private updateTopicPreference(profile: UserPreferenceProfile, topicCategory: string, content: ContentPerformanceMetrics): void {
+    if (!profile.preferredTopics[topicCategory]) {
+      profile.preferredTopics[topicCategory] = {
+        count: 0,
+        avgScore: 0,
+        conversionRate: 0
+      };
+    }
+
+    const pref = profile.preferredTopics[topicCategory];
+    pref.count++;
+    pref.avgScore = (pref.avgScore * (pref.count - 1) + content.overallScore) / pref.count;
+    pref.conversionRate = (pref.conversionRate * (pref.count - 1) + (content.trafficPotential / 100)) / pref.count;
+  }
+
+  private updateTonePreference(profile: UserPreferenceProfile, tone: string, content: ContentPerformanceMetrics): void {
+    if (!profile.preferredTones[tone]) {
+      profile.preferredTones[tone] = {
+        count: 0,
+        avgScore: 0,
+        engagementRate: 0
+      };
+    }
+
+    const pref = profile.preferredTones[tone];
+    pref.count++;
+    pref.avgScore = (pref.avgScore * (pref.count - 1) + content.overallScore) / pref.count;
+    pref.engagementRate = (pref.engagementRate * (pref.count - 1) + content.userEngagementEstimate) / pref.count;
+  }
+
+  private updateLengthPreference(profile: UserPreferenceProfile, lengthCategory: string, content: ContentPerformanceMetrics): void {
+    if (!profile.preferredLengths[lengthCategory]) {
+      profile.preferredLengths[lengthCategory] = {
+        count: 0,
+        avgScore: 0,
+        readTime: content.wordCount / 200 // Average reading speed
+      };
+    }
+
+    const pref = profile.preferredLengths[lengthCategory];
+    pref.count++;
+    pref.avgScore = (pref.avgScore * (pref.count - 1) + content.overallScore) / pref.count;
+    pref.readTime = (pref.readTime * (pref.count - 1) + (content.wordCount / 200)) / pref.count;
+  }
+
+  private updateContentPatterns(profile: UserPreferenceProfile, pattern: ContentPattern): void {
+    // Update pattern frequency and confidence
+    const existingPattern = profile.successfulPatterns.find(p =>
+      p.characteristics.contentType === pattern.characteristics.contentType &&
+      p.characteristics.topicCategory === pattern.characteristics.topicCategory
+    );
+
+    if (existingPattern) {
+      existingPattern.frequency++;
+      existingPattern.confidence = Math.min(0.95, existingPattern.confidence + 0.05);
+    } else {
+      if (pattern.performance.successRate > 0.7) {
+        profile.successfulPatterns.push(pattern);
+      } else {
+        profile.unsuccessfulPatterns.push(pattern);
+      }
+    }
+  }
+
+  private updateEngagementPatterns(profile: UserPreferenceProfile, content: ContentPerformanceMetrics): void {
+    // Simple engagement time analysis
+    // In a real implementation, this would use actual engagement timestamps
+    const engagementScore = content.userEngagementEstimate;
+
+    if (engagementScore > 80) {
+      // Content performing well, current time might be good
+      const currentHour = new Date().getHours();
+      if (!profile.peakEngagementTimes.includes(currentHour)) {
+        profile.peakEngagementTimes.push(currentHour);
+      }
+    }
+  }
+
+  private calculateProfileAccuracy(profile: UserPreferenceProfile): number {
+    if (profile.totalContentAnalyzed === 0) return 0.75;
+
+    let totalPredictions = 0;
+    let correctPredictions = 0;
+
+    // Check content type predictions
+    Object.values(profile.preferredContentTypes).forEach(pref => {
+      totalPredictions += pref.count;
+      correctPredictions += pref.count * pref.successRate;
+    });
+
+    if (totalPredictions === 0) return 0.75;
+
+    return Math.min(0.95, correctPredictions / totalPredictions);
+  }
+
+  // Recommendation generation methods
+  private getOptimalContentTypes(profile: UserPreferenceProfile): Array<{
+    type: string;
+    confidence: number;
+    expectedScore: number;
+    reasoning: string;
+  }> {
+    return Object.entries(profile.preferredContentTypes)
+      .sort(([, a], [, b]) => b.avgScore - a.avgScore)
+      .slice(0, 5)
+      .map(([type, data]) => ({
+        type,
+        confidence: data.successRate,
+        expectedScore: data.avgScore,
+        reasoning: `Based on ${data.count} pieces with ${Math.round(data.successRate * 100)}% success rate`
+      }));
+  }
+
+  private getTopicSuggestions(profile: UserPreferenceProfile): Array<{
+    topic: string;
+    category: string;
+    priority: number;
+    confidence: number;
+    expectedPerformance: number;
+  }> {
+    return Object.entries(profile.preferredTopics)
+      .sort(([, a], [, b]) => b.avgScore - a.avgScore)
+      .slice(0, 8)
+      .map(([category, data], index) => ({
+        topic: `${category} strategies and best practices`,
+        category,
+        priority: index + 1,
+        confidence: data.successRate,
+        expectedPerformance: data.avgScore
+      }));
+  }
+
+  private getToneRecommendations(profile: UserPreferenceProfile): Array<{
+    tone: string;
+    usage: number;
+    effectiveness: number;
+    expectedEngagement: number;
+  }> {
+    return Object.entries(profile.preferredTones)
+      .sort(([, a], [, b]) => b.engagementRate - a.engagementRate)
+      .slice(0, 4)
+      .map(([tone, data]) => ({
+        tone,
+        usage: data.count,
+        effectiveness: data.avgScore,
+        expectedEngagement: data.engagementRate
+      }));
+  }
+
+  private getStructuralPreferences(profile: UserPreferenceProfile): any {
+    const bestLength = Object.entries(profile.preferredLengths)
+      .sort(([, a], [, b]) => b.avgScore - a.avgScore)[0];
+
+    const lengthMap = {
+      short: 300,
+      medium: 800,
+      long: 1500,
+      extended: 2000
+    };
+
+    return {
+      optimalLength: lengthMap[bestLength?.[0] as keyof typeof lengthMap] || 800,
+      optimalReadTime: bestLength?.[1]?.readTime || 4,
+      preferredStructure: ['title', 'introduction', 'main content', 'conclusion', 'call-to-action'],
+      multimediaNeeds: ['images', 'videos'],
+      keywordDensity: 1.5
+    };
+  }
+
+  private calculateOptimalFrequency(profile: UserPreferenceProfile): number {
+    // Base frequency on total content and engagement
+    const baseFrequency = 3; // 3 times per week
+    const engagementMultiplier = profile.accuracyScore > 0.8 ? 1.2 : 1.0;
+
+    return Math.round(baseFrequency * engagementMultiplier);
+  }
+
+  private generateRefreshSchedule(profile: UserPreferenceProfile): Record<string, number> {
+    return {
+      '30_days': 30,
+      '60_days': 60,
+      '90_days': 90,
+      '180_days': 180
+    };
+  }
+
+  private getFocusAreas(profile: UserPreferenceProfile): string[] {
+    return Object.entries(profile.preferredTopics)
+      .sort(([, a], [, b]) => b.avgScore - a.avgScore)
+      .slice(0, 3)
+      .map(([category]) => category);
+  }
+
+  private getAvoidAreas(profile: UserPreferenceProfile): string[] {
+    // Areas with low performance
+    return Object.entries(profile.preferredTopics)
+      .filter(([, data]) => data.avgScore < 50)
+      .map(([category]) => category);
+  }
+
+  private getCompetitiveAdvantages(profile: UserPreferenceProfile): string[] {
+    return Object.entries(profile.preferredContentTypes)
+      .filter(([, data]) => data.successRate > 0.8)
+      .map(([type]) => `High-performing ${type} content`);
+  }
+
+  private getGrowthOpportunities(profile: UserPreferenceProfile): string[] {
+    const opportunities: string[] = [];
+
+    if (profile.accuracyScore > 0.85) {
+      opportunities.push('Expand into new content categories');
+    }
+
+    if (Object.keys(profile.preferredContentTypes).length < 3) {
+      opportunities.push('Diversify content types');
+    }
+
+    return opportunities;
+  }
+
+  private predictNextQuarterPerformance(profile: UserPreferenceProfile): number {
+    const currentAverage = Object.values(profile.preferredContentTypes)
+      .reduce((sum, data) => sum + data.avgScore, 0) /
+      Object.keys(profile.preferredContentTypes).length || 70;
+
+    // Predict slight improvement based on learning
+    const learningImprovement = profile.accuracyScore * 5;
+
+    return Math.min(90, currentAverage + learningImprovement);
+  }
+
+  private calculateSuccessProbability(profile: UserPreferenceProfile): number {
+    return profile.accuracyScore;
+  }
+
+  private getRecommendedContentMix(profile: UserPreferenceProfile): Record<string, number> {
+    const mix: Record<string, number> = {};
+    const total = Object.values(profile.preferredContentTypes).reduce((sum, data) => sum + data.count, 0);
+
+    Object.entries(profile.preferredContentTypes).forEach(([type, data]) => {
+      mix[type] = data.count / total;
+    });
+
+    return mix;
+  }
+
+  private identifyRiskFactors(profile: UserPreferenceProfile): string[] {
+    const risks: string[] = [];
+
+    if (profile.totalContentAnalyzed < 10) {
+      risks.push('Limited data for accurate predictions');
+    }
+
+    if (profile.accuracyScore < 0.7) {
+      risks.push('Model accuracy needs improvement');
+    }
+
+    if (Object.keys(profile.preferredContentTypes).length === 1) {
+      risks.push('Content type concentration risk');
+    }
+
+    return risks;
+  }
+
+  // Pattern analysis methods
+  private updatePatternPredictions(profile: UserPreferenceProfile): void {
+    profile.successfulPatterns.forEach(pattern => {
+      // Update predictive power based on recent performance
+      pattern.predictivePower = Math.min(0.9, pattern.predictivePower + 0.05);
+    });
+  }
+
+  private identifyHighPerformanceCharacteristics(profile: UserPreferenceProfile): void {
+    // Analyze what makes content successful
+    const highPerformingPatterns = profile.successfulPatterns.filter(p => p.performance.successRate > 0.8);
+
+    // Would update preferences based on common characteristics
+  }
+
+  private updatePredictionConfidence(profile: UserPreferenceProfile): void {
+    profile.successfulPatterns.forEach(pattern => {
+      if (pattern.frequency >= 5) {
+        pattern.confidence = Math.min(0.95, pattern.confidence + 0.02);
+      }
+    });
+  }
+
+  // Cache management (simplified - would use database in production)
+  private profileCache: Map<string, UserPreferenceProfile> = new Map();
+
+  private getUserProfileFromCache(cacheKey: string): UserPreferenceProfile | undefined {
+    return this.profileCache.get(cacheKey);
+  }
+
+  private cacheUserProfile(cacheKey: string, profile: UserPreferenceProfile): void {
+    this.profileCache.set(cacheKey, profile);
+  }
 }
 
 // Singleton instance
@@ -674,4 +1411,15 @@ export function getContentPerformanceTracker(): ContentPerformanceTracker {
 export async function generateContentPerformanceReport(domain: string): Promise<ContentPerformanceReport> {
   const tracker = getContentPerformanceTracker();
   return await tracker.generatePerformanceReport(domain);
+}
+
+export async function generatePersonalizationInsights(
+  userId: string,
+  businessId?: string,
+  contentHistory?: ContentPerformanceMetrics[],
+  performanceData?: any[]
+): Promise<PersonalizationInsights> {
+  const tracker = getContentPerformanceTracker();
+  // Use userId as businessId if not provided
+  return await tracker.generatePersonalizationInsights(userId, businessId || userId, contentHistory, performanceData);
 }

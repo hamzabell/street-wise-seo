@@ -146,6 +146,7 @@ export async function POST(request: NextRequest) {
           businessType: topic.businessType || undefined,
           targetAudience: topic.targetAudience || undefined,
           location: topic.location || undefined,
+          detailedLocation: topic.detailedLocation ? JSON.parse(topic.detailedLocation) : undefined,
           targetWordCount: Math.floor(
             (contentTypeConfig.wordCount.min + contentTypeConfig.wordCount.max) / 2
           ),

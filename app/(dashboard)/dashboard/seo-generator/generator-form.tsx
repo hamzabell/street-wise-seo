@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { type DetailedLocation } from '@/lib/seo/location-service';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { LocationAutocomplete } from '@/components/ui/location-autocomplete';
-import { Loader2, Wand2, Sparkles, Settings, ChevronDown, TrendingUp, Globe, MessageCircle, Building, Target, Info, RefreshCw, Clock, CheckCircle } from 'lucide-react';
+import { Loader2, Wand2, Sparkles, Settings, ChevronDown, TrendingUp, Globe, MessageCircle, Building, Target, Info, RefreshCw, Clock, CheckCircle, Languages, Users, MapPin } from 'lucide-react';
 import { INDUSTRY_TEMPLATES } from '@/lib/seo/industry-templates';
 import { IndustryIcon, getIndustryIcon } from '@/components/ui/industry-icons';
 
@@ -26,12 +27,16 @@ const TopicGenerationSchema = z.object({
   // Enhanced personalization fields
   tone: z.string().min(1, 'Please select a tone').default('professional'),
   additionalContext: z.string().optional(),
+  // Cultural and language options
+  languagePreference: z.enum(['english', 'native', 'cultural_english']).default('english'),
+  formalityLevel: z.enum(['formal', 'professional', 'casual', 'slang_heavy']).default('professional'),
+  contentPurpose: z.enum(['marketing', 'educational', 'conversational', 'technical']).default('marketing'),
 });
 
 type TopicGenerationForm = z.infer<typeof TopicGenerationSchema>;
 
 interface GeneratorFormProps {
-  onSubmit: (data: TopicGenerationForm & { websiteUrl: string; forceRecrawl?: boolean }) => Promise<void>;
+  onSubmit: (data: TopicGenerationForm & { websiteUrl: string; forceRecrawl?: boolean; detailedLocation?: DetailedLocation }) => Promise<void>;
   isGenerating: boolean;
   usageStats?: {
     daily: { remaining: number; limit: number };
@@ -112,6 +117,103 @@ const toneOptions = [
   }
 ];
 
+const languagePreferenceOptions = [
+  {
+    value: 'english',
+    label: 'Standard English',
+    description: 'Professional English with cultural awareness',
+    example: 'Generate content in standard English while respecting local cultural context',
+    icon: Globe,
+    color: 'bg-blue-50 text-blue-700 border-blue-200'
+  },
+  {
+    value: 'cultural_english',
+    label: 'Cultural English',
+    description: 'English with local slang and expressions',
+    example: 'Mix English with Nigerian Pidgin, Indian English, or other local expressions',
+    icon: MessageCircle,
+    color: 'bg-green-50 text-green-700 border-green-200'
+  },
+  {
+    value: 'native',
+    label: 'Native Language',
+    description: 'Content in the local language of your region',
+    example: 'Generate content in Hindi, Spanish, or other local languages',
+    icon: Sparkles,
+    color: 'bg-purple-50 text-purple-700 border-purple-200'
+  }
+];
+
+const formalityLevelOptions = [
+  {
+    value: 'formal',
+    label: 'Formal',
+    description: 'Professional, respectful language for business contexts',
+    example: 'We hereby present our comprehensive analysis for your consideration.',
+    icon: Building,
+    color: 'bg-blue-100 text-blue-800 border-blue-200'
+  },
+  {
+    value: 'professional',
+    label: 'Professional',
+    description: 'Business-appropriate language that\'s approachable',
+    example: 'Let\'s explore how our services can benefit your business goals.',
+    icon: Target,
+    color: 'bg-green-100 text-green-800 border-green-200'
+  },
+  {
+    value: 'casual',
+    label: 'Casual',
+    description: 'Relaxed, friendly tone for building rapport',
+    example: 'Hey there! We\'ve got some great ideas that might work for you.',
+    icon: MessageCircle,
+    color: 'bg-yellow-100 text-yellow-800 border-yellow-200'
+  },
+  {
+    value: 'slang_heavy',
+    label: 'Local Slang',
+    description: 'Authentic local expressions and casual language',
+    example: 'Abeg, check out these wicked ideas for your business!',
+    icon: Sparkles,
+    color: 'bg-orange-100 text-orange-800 border-orange-200'
+  }
+];
+
+const contentPurposeOptions = [
+  {
+    value: 'marketing',
+    label: 'Marketing',
+    description: 'Persuasive content to attract and convert customers',
+    example: 'Promotional content that highlights benefits and drives action',
+    icon: TrendingUp,
+    color: 'bg-red-50 text-red-700 border-red-200'
+  },
+  {
+    value: 'educational',
+    label: 'Educational',
+    description: 'Informative content that teaches and explains',
+    example: 'Helpful content that answers questions and provides value',
+    icon: Sparkles,
+    color: 'bg-blue-50 text-blue-700 border-blue-200'
+  },
+  {
+    value: 'conversational',
+    label: 'Conversational',
+    description: 'Engaging content that encourages interaction',
+    example: 'Interactive content that feels like a conversation',
+    icon: MessageCircle,
+    color: 'bg-green-50 text-green-700 border-green-200'
+  },
+  {
+    value: 'technical',
+    label: 'Technical',
+    description: 'Detailed content for expert audiences',
+    example: 'In-depth content with technical details and specifications',
+    icon: Settings,
+    color: 'bg-purple-50 text-purple-700 border-purple-200'
+  }
+];
+
 export function GeneratorForm({ onSubmit, isGenerating, usageStats }: GeneratorFormProps) {
   const [showSuggestions, setShowSuggestions] = useState({
     targetAudience: false,
@@ -128,6 +230,7 @@ export function GeneratorForm({ onSubmit, isGenerating, usageStats }: GeneratorF
   } | null>(null);
   const [isCheckingCache, setIsCheckingCache] = useState(false);
   const [forceRecrawl, setForceRecrawl] = useState(false);
+  const [detailedLocation, setDetailedLocation] = useState<DetailedLocation | null>(null);
 
   const {
     register,
@@ -206,11 +309,12 @@ export function GeneratorForm({ onSubmit, isGenerating, usageStats }: GeneratorF
   };
 
   const handleFormSubmit = async (data: TopicGenerationForm) => {
-    // Include the primary website URL and force recrawl flag in the submission
+    // Include the primary website URL, force recrawl flag, and detailed location data in the submission
     await onSubmit({
       ...data,
       websiteUrl: primaryWebsiteUrl,
-      forceRecrawl: forceRecrawl
+      forceRecrawl: forceRecrawl,
+      detailedLocation: detailedLocation || undefined
     });
 
     // Reset force recrawl flag after submission
@@ -568,10 +672,185 @@ export function GeneratorForm({ onSubmit, isGenerating, usageStats }: GeneratorF
             <LocationAutocomplete
               value={watchedFields.location || ''}
               onChange={(value) => setValue('location', value)}
-              placeholder="e.g., New York, Los Angeles, or leave empty for general topics"
+              onLocationDetected={(locationData) => setDetailedLocation(locationData)}
+              placeholder="e.g., New York, London, Tokyo, or leave empty for general topics"
               disabled={isGenerating}
               className="text-base"
             />
+            {detailedLocation && (
+              <div className="text-xs text-green-600 bg-green-50 p-2 rounded border border-green-200">
+                <span className="font-medium">Enhanced location detected:</span> {detailedLocation.fullDisplay}
+                {detailedLocation.geographicContext && (
+                  <span className="ml-1">({detailedLocation.geographicContext} context)</span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Cultural and Language Settings */}
+          <div className="border-t pt-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Languages className="h-5 w-5 text-primary" />
+              <h3 className="text-lg font-semibold">Cultural & Language Settings</h3>
+            </div>
+
+            <div className="space-y-6">
+              {/* Language Preference */}
+              <div className="space-y-3">
+                <Label className="text-base font-medium flex items-center gap-2">
+                  <Globe className="h-4 w-4" />
+                  Language Preference
+                </Label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {languagePreferenceOptions.map((option) => {
+                    const isSelected = watchedFields.languagePreference === option.value;
+                    const Icon = option.icon;
+
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => {
+                          setValue('languagePreference', option.value as 'english' | 'native' | 'cultural_english', { shouldValidate: true });
+                        }}
+                        className={`p-4 rounded-lg border-2 transition-all touch-manipulation active:scale-[0.96] hover:shadow-md ${
+                          isSelected
+                            ? 'border-primary bg-primary/5 shadow-sm ring-2 ring-primary/20'
+                            : 'border-border hover:border-primary/50 bg-background hover:bg-gray-50'
+                        }`}
+                        disabled={isGenerating}
+                      >
+                        <div className="flex items-start gap-3 text-left">
+                          <div className={`p-2 rounded-lg ${isSelected ? 'bg-primary text-primary-foreground' : 'bg-gray-100 text-gray-600'}`}>
+                            <Icon className="h-4 w-4" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className={`font-medium text-sm ${isSelected ? 'text-primary' : 'text-gray-900'}`}>
+                              {option.label}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              {option.description}
+                            </div>
+                            {isSelected && (
+                              <div className="mt-2 p-2 bg-gray-50 rounded text-xs text-gray-600 italic">
+                                "{option.example}"
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Choose how you want your content to be generated - standard English, culturally-adapted English, or native local language
+                </p>
+              </div>
+
+              {/* Formality Level */}
+              <div className="space-y-3">
+                <Label className="text-base font-medium flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  Formality Level
+                </Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {formalityLevelOptions.map((option) => {
+                    const isSelected = watchedFields.formalityLevel === option.value;
+                    const Icon = option.icon;
+
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => {
+                          setValue('formalityLevel', option.value as 'formal' | 'professional' | 'casual' | 'slang_heavy', { shouldValidate: true });
+                        }}
+                        className={`p-3 rounded-lg border-2 transition-all touch-manipulation active:scale-[0.96] hover:shadow-md ${
+                          isSelected
+                            ? 'border-primary bg-primary/5 shadow-sm ring-2 ring-primary/20'
+                            : 'border-border hover:border-primary/50 bg-background hover:bg-gray-50'
+                        }`}
+                        disabled={isGenerating}
+                      >
+                        <div className="flex items-start gap-2 text-left">
+                          <div className={`p-1.5 rounded-lg ${isSelected ? 'bg-primary text-primary-foreground' : 'bg-gray-100 text-gray-600'}`}>
+                            <Icon className="h-3.5 w-3.5" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className={`font-medium text-xs ${isSelected ? 'text-primary' : 'text-gray-900'}`}>
+                              {option.label}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              {option.description}
+                            </div>
+                            {isSelected && (
+                              <div className="mt-1.5 p-1.5 bg-gray-50 rounded text-xs text-gray-600 italic">
+                                "{option.example}"
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Select the formality level that matches your brand voice and audience expectations
+                </p>
+              </div>
+
+              {/* Content Purpose */}
+              <div className="space-y-3">
+                <Label className="text-base font-medium flex items-center gap-2">
+                  <Target className="h-4 w-4" />
+                  Content Purpose
+                </Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {contentPurposeOptions.map((option) => {
+                    const isSelected = watchedFields.contentPurpose === option.value;
+                    const Icon = option.icon;
+
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => {
+                          setValue('contentPurpose', option.value as 'marketing' | 'educational' | 'conversational' | 'technical', { shouldValidate: true });
+                        }}
+                        className={`p-3 rounded-lg border-2 transition-all touch-manipulation active:scale-[0.96] hover:shadow-md ${
+                          isSelected
+                            ? 'border-primary bg-primary/5 shadow-sm ring-2 ring-primary/20'
+                            : 'border-border hover:border-primary/50 bg-background hover:bg-gray-50'
+                        }`}
+                        disabled={isGenerating}
+                      >
+                        <div className="flex items-start gap-2 text-left">
+                          <div className={`p-1.5 rounded-lg ${isSelected ? 'bg-primary text-primary-foreground' : 'bg-gray-100 text-gray-600'}`}>
+                            <Icon className="h-3.5 w-3.5" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className={`font-medium text-xs ${isSelected ? 'text-primary' : 'text-gray-900'}`}>
+                              {option.label}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              {option.description}
+                            </div>
+                            {isSelected && (
+                              <div className="mt-1.5 p-1.5 bg-gray-50 rounded text-xs text-gray-600 italic">
+                                "{option.example}"
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Define the primary purpose of your content to ensure it achieves your goals
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* Advanced Settings */}

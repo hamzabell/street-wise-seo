@@ -3,12 +3,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Loader2, MapPin, X } from 'lucide-react';
-import { locationService, LocationSuggestion } from '@/lib/seo/location-service';
+import { Loader2, MapPin, X, Info } from 'lucide-react';
+import { locationService, LocationSuggestion, DetailedLocation } from '@/lib/seo/location-service';
 
 interface LocationAutocompleteProps {
   value: string;
   onChange: (value: string) => void;
+  onLocationDetected?: (detailedLocation: DetailedLocation) => void;
   placeholder?: string;
   disabled?: boolean;
   className?: string;
@@ -17,7 +18,8 @@ interface LocationAutocompleteProps {
 export function LocationAutocomplete({
   value,
   onChange,
-  placeholder = "e.g., New York, Los Angeles, or leave empty for general topics",
+  onLocationDetected,
+  placeholder = "e.g., New York, London, Tokyo, or leave empty for general topics",
   disabled = false,
   className = "",
 }: LocationAutocompleteProps) {
@@ -26,6 +28,8 @@ export function LocationAutocomplete({
   const [isLocating, setIsLocating] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [detailedLocation, setDetailedLocation] = useState<DetailedLocation | null>(null);
+  const [isUsingFallback, setIsUsingFallback] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
@@ -36,21 +40,29 @@ export function LocationAutocomplete({
     if (!query || query.trim().length < 2) {
       setSuggestions([]);
       setShowSuggestions(false);
+      setIsUsingFallback(false);
       return;
     }
 
     setIsLoading(true);
     setError(null);
+    setIsUsingFallback(false);
 
     try {
       const results = await locationService.getLocationSuggestions(query);
       setSuggestions(results);
       setShowSuggestions(results.length > 0);
+
+      // Check if we're using fallback data (results will all have fallback_ IDs)
+      if (results.length > 0 && results[0].place_id && String(results[0].place_id).startsWith('fallback_')) {
+        setIsUsingFallback(true);
+      }
     } catch (err) {
       console.error('Error searching locations:', err);
       setError('Failed to fetch location suggestions');
       setSuggestions([]);
       setShowSuggestions(false);
+      setIsUsingFallback(false);
     } finally {
       setIsLoading(false);
     }
@@ -70,33 +82,52 @@ export function LocationAutocomplete({
     // Set new timeout for debounced search
     debounceRef.current = setTimeout(() => {
       searchLocations(newValue);
-    }, 300);
+    }, 800);
   };
 
   // Handle suggestion selection
   const handleSuggestionSelect = (suggestion: LocationSuggestion) => {
     const formattedValue = locationService.formatSuggestionForDisplay(suggestion);
+    const detailedLocation = locationService.getDetailedLocationFromSuggestion(suggestion);
+
     onChange(formattedValue);
+    setDetailedLocation(detailedLocation);
     setShowSuggestions(false);
     setSuggestions([]);
     setError(null);
+    setIsUsingFallback(false); // Reset fallback indicator
     inputRef.current?.focus();
+
+    // Notify parent component with detailed location data
+    if (onLocationDetected) {
+      onLocationDetected(detailedLocation);
+    }
   };
 
   // Handle "locate me" button click
   const handleLocateMe = async () => {
     setIsLocating(true);
     setError(null);
+    setDetailedLocation(null);
 
     try {
-      const location = await locationService.getLocationFromGeolocation();
-      onChange(location);
+      const detailedLoc = await locationService.getDetailedLocationFromGeolocation();
+      onChange(detailedLoc.fullDisplay);
+      setDetailedLocation(detailedLoc);
       setShowSuggestions(false);
       setSuggestions([]);
+      setIsUsingFallback(false); // Reset fallback indicator
+
+      // Notify parent component with detailed location data
+      if (onLocationDetected) {
+        onLocationDetected(detailedLoc);
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to get your location';
       setError(errorMessage);
       console.error('Error getting geolocation:', err);
+      setDetailedLocation(null);
+      setIsUsingFallback(false); // Reset fallback indicator
     } finally {
       setIsLocating(false);
     }
@@ -108,6 +139,8 @@ export function LocationAutocomplete({
     setShowSuggestions(false);
     setSuggestions([]);
     setError(null);
+    setDetailedLocation(null);
+    setIsUsingFallback(false);
     inputRef.current?.focus();
   };
 
@@ -237,7 +270,7 @@ export function LocationAutocomplete({
         >
           {suggestions.map((suggestion, index) => (
             <button
-              key={suggestion.place_id}
+              key={String(suggestion.place_id)}
               type="button"
               data-suggestion-index={index}
               className="w-full text-left px-3 py-3 text-sm hover:bg-muted transition-colors touch-manipulation active:scale-[0.98] border-b border-border last:border-b-0"
@@ -251,8 +284,20 @@ export function LocationAutocomplete({
                   <div className="font-medium text-foreground">
                     {locationService.formatSuggestionForDisplay(suggestion)}
                   </div>
-                  <div className="text-xs text-muted-foreground truncate">
-                    {suggestion.display_name}
+                  <div className="text-xs text-muted-foreground">
+                    <span>
+                      {suggestion.address.city && suggestion.address.state && suggestion.address.country
+                        ? `${suggestion.address.city}, ${suggestion.address.state}, ${suggestion.address.country}`
+                        : suggestion.address.city && suggestion.address.country
+                        ? `${suggestion.address.city}, ${suggestion.address.country}`
+                        : suggestion.display_name
+                      }
+                    </span>
+                    {suggestion.address.country_code && (
+                      <span className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground">
+                        {suggestion.address.country_code.toUpperCase()}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -283,10 +328,21 @@ export function LocationAutocomplete({
         </div>
       )}
 
+      
       {/* Help text */}
       <p className="text-xs text-muted-foreground mt-1">
-        Adding a location helps generate locally-relevant topics
+        Add any global location to generate locally-relevant content
       </p>
+
+      {/* Fallback indicator */}
+      {isUsingFallback && (
+        <div className="text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200 mt-2">
+          <span className="font-medium">Using offline location database</span>
+          <p className="text-xs mt-1">
+            Network unavailable - showing major international cities
+          </p>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "saved_topics" ADD COLUMN "detailed_location" text;

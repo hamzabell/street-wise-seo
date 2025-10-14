@@ -21,6 +21,10 @@ const GenerateTopicsRequestSchema = z.object({
   additionalContext: z.string().optional(),
   websiteUrl: z.string().url('Invalid website URL').optional().or(z.literal('')),
   forceRecrawl: z.boolean().default(false), // Force re-crawl even if recently crawled
+  // Cultural and language options
+  languagePreference: z.enum(['english', 'native', 'cultural_english']).default('english'),
+  formalityLevel: z.enum(['formal', 'professional', 'casual', 'slang_heavy']).default('professional'),
+  contentPurpose: z.enum(['marketing', 'educational', 'conversational', 'technical']).default('marketing'),
 });
 
 // Rate limiting configuration
