@@ -13,6 +13,24 @@ export function cleanTopicTitle(topicTitle: string): string {
 
   let cleaned = topicTitle.trim();
 
+  // First, handle cases where source identifiers are mixed directly into the topic
+  // This handles the specific issue where topics show "competitor_advantage 4" etc.
+  const directSourcePatterns = [
+    /\s+(competitor_advantage|website_gap|content_opportunity|strategic_positioning|market_opportunity|competitive_gap)\s*\d*$/gi,
+    /\s+(ai|competitor|website|content|gap|opportunity|advantage|strategic|market|positioning)\s*\d*$/gi,
+    // Handle patterns like "competitor_advantage 4" at the end
+    /\s+[a-z_]+_(advantage|gap|opportunity|positioning)\s+\d+$/gi,
+    // Handle patterns with just numbers and source words
+    /\s+(competitor|website|content|gap|opportunity|advantage)\s+\d+$/gi
+  ];
+
+  for (const pattern of directSourcePatterns) {
+    if (pattern.test(cleaned)) {
+      cleaned = cleaned.replace(pattern, '').trim();
+      break;
+    }
+  }
+
   // Remove trailing source identifiers that appear after the last pipe
   // This handles cases like "Topic content | source_identifier"
   const lastPipeIndex = cleaned.lastIndexOf('|');
@@ -21,15 +39,17 @@ export function cleanTopicTitle(topicTitle: string): string {
 
     // Check if what's after the last pipe looks like a source identifier
     const sourceIdentifiers = [
-      'ai', 'website_gap', 'competitor_advantage', 'content_opportunity',
-      'website gap', 'competitor advantage', 'content opportunity',
-      'gap', 'opportunity', 'advantage', 'content', 'competitor', 'website'
+      'ai', 'website_gap', 'competitor_advantage', 'content_opportunity', 'strategic_positioning', 'market_opportunity', 'competitive_gap',
+      'website gap', 'competitor advantage', 'content opportunity', 'strategic positioning', 'market opportunity', 'competitive gap',
+      'gap', 'opportunity', 'advantage', 'content', 'competitor', 'website', 'strategic', 'market', 'positioning'
     ];
 
     const isSourceIdentifier = sourceIdentifiers.some(identifier =>
       afterPipe === identifier ||
       afterPipe.includes(identifier) ||
-      identifier.includes(afterPipe)
+      identifier.includes(afterPipe) ||
+      afterPipe.includes(identifier.replace(/_/g, ' ')) ||
+      identifier.replace(/_/g, ' ').includes(afterPipe)
     );
 
     if (isSourceIdentifier) {
@@ -246,18 +266,126 @@ export function extractCleanJson(content: string): string {
   }
 
   // Try to find JSON array or object in the content
-  // Use greedy matching to capture the complete JSON structure
-  const arrayMatch = jsonContent.match(/\[[\s\S]*\]/);
+  // Use more precise matching to avoid capturing extra content
+  let bestMatch = '';
+
+  // Try to match JSON array first (more precise pattern)
+  const arrayMatch = jsonContent.match(/(\[[\s\S]*?\])/);
   if (arrayMatch) {
-    jsonContent = arrayMatch[0];
-  } else {
-    const objectMatch = jsonContent.match(/\{[\s\S]*\}/);
-    if (objectMatch) {
-      jsonContent = objectMatch[0];
+    const candidate = arrayMatch[0];
+    // Validate that this is valid JSON
+    try {
+      JSON.parse(candidate);
+      return candidate.trim();
+    } catch (e) {
+      // If not valid, continue looking for better match
     }
   }
 
-  return jsonContent.trim();
+  // Try to match JSON object (more precise pattern)
+  const objectMatch = jsonContent.match(/(\{[\s\S]*?\})/);
+  if (objectMatch) {
+    const candidate = objectMatch[0];
+    // Validate that this is valid JSON
+    try {
+      JSON.parse(candidate);
+      return candidate.trim();
+    } catch (e) {
+      // If not valid, continue with enhanced extraction
+    }
+  }
+
+  // Enhanced extraction: Try to find balanced JSON by counting braces
+  if (jsonContent.includes('{')) {
+    let braceCount = 0;
+    let startIdx = -1;
+    let endIdx = -1;
+
+    for (let i = 0; i < jsonContent.length; i++) {
+      const char = jsonContent[i];
+      if (char === '{') {
+        if (braceCount === 0) {
+          startIdx = i;
+        }
+        braceCount++;
+      } else if (char === '}') {
+        braceCount--;
+        if (braceCount === 0 && startIdx !== -1) {
+          endIdx = i + 1;
+          break;
+        }
+      }
+    }
+
+    if (startIdx !== -1 && endIdx !== -1) {
+      const candidate = jsonContent.substring(startIdx, endIdx);
+      try {
+        JSON.parse(candidate);
+        return candidate.trim();
+      } catch (e) {
+        // Continue to fallback
+      }
+    }
+  }
+
+  // Enhanced extraction: Try to find balanced JSON array
+  if (jsonContent.includes('[')) {
+    let bracketCount = 0;
+    let startIdx = -1;
+    let endIdx = -1;
+
+    for (let i = 0; i < jsonContent.length; i++) {
+      const char = jsonContent[i];
+      if (char === '[') {
+        if (bracketCount === 0) {
+          startIdx = i;
+        }
+        bracketCount++;
+      } else if (char === ']') {
+        bracketCount--;
+        if (bracketCount === 0 && startIdx !== -1) {
+          endIdx = i + 1;
+          break;
+        }
+      }
+    }
+
+    if (startIdx !== -1 && endIdx !== -1) {
+      const candidate = jsonContent.substring(startIdx, endIdx);
+      try {
+        JSON.parse(candidate);
+        return candidate.trim();
+      } catch (e) {
+        // Continue to fallback
+      }
+    }
+  }
+
+  // Fallback: Use greedy matching but validate the result
+  const arrayMatchFallback = jsonContent.match(/\[[\s\S]*\]/);
+  if (arrayMatchFallback) {
+    const candidate = arrayMatchFallback[0];
+    try {
+      JSON.parse(candidate);
+      return candidate.trim();
+    } catch (e) {
+      // Not valid, continue
+    }
+  }
+
+  const objectMatchFallback = jsonContent.match(/\{[\s\S]*\}/);
+  if (objectMatchFallback) {
+    const candidate = objectMatchFallback[0];
+    try {
+      JSON.parse(candidate);
+      return candidate.trim();
+    } catch (e) {
+      // Not valid, return empty
+    }
+  }
+
+  // If all else fails, return empty string to trigger fallback
+  return '';
 }
 
 /**

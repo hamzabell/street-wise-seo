@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
       try {
         const variantNumber = (i + 1);
 
-        // Generate content using AI
+        // Generate content using AI with cultural context
         const generatedContentData = await generatePersonalizedContent({
           topic: topic.topic,
           contentType,
@@ -150,7 +150,18 @@ export async function POST(request: NextRequest) {
           targetWordCount: Math.floor(
             (contentTypeConfig.wordCount.min + contentTypeConfig.wordCount.max) / 2
           ),
-          tags: topic.tags ? JSON.parse(topic.tags) : []
+          tags: topic.tags ? JSON.parse(topic.tags) : [],
+          // Enhanced cultural context parameters
+          languagePreference: (topic.languagePreference as any) || 'english',
+          formalityLevel: (topic.formalityLevel as any) || 'professional',
+          contentPurpose: (topic.contentPurpose as any) || 'marketing',
+          brandVoiceAnalysis: topic.brandVoiceAnalysis ? JSON.parse(topic.brandVoiceAnalysis) : undefined,
+          businessOfferings: topic.businessOfferings ? JSON.parse(topic.businessOfferings) : undefined,
+          competitorIntelligence: topic.competitorIntelligence ? JSON.parse(topic.competitorIntelligence) : undefined,
+          culturalContext: topic.culturalContext ? JSON.parse(topic.culturalContext) : undefined,
+          marketPositioning: topic.marketPositioning ? JSON.parse(topic.marketPositioning) : undefined,
+          contextWeights: topic.contextWeights ? JSON.parse(topic.contextWeights) : undefined,
+          useEnhancedPrompts: true // Enable enhanced regional prompts
         });
 
         // Calculate reading time (average 200 words per minute)

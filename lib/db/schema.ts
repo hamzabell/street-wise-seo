@@ -116,6 +116,16 @@ export const savedTopics = pgTable('saved_topics', {
   additionalContext: text('additional_context'), // User's specific instructions and preferences
   websiteUrl: text('website_url'), // Website to use for context during content generation
   websiteAnalysisContext: text('website_analysis_context'), // JSON string with analyzed website data
+  // Enhanced cultural context fields
+  languagePreference: text('language_preference'), // english, cultural_english, native
+  formalityLevel: text('formality_level'), // formal, professional, casual, slang_heavy
+  contentPurpose: text('content_purpose'), // marketing, educational, conversational, technical
+  brandVoiceAnalysis: text('brand_voice_analysis'), // JSON string with brand voice analysis
+  businessOfferings: text('business_offerings'), // JSON string with business offerings
+  competitorIntelligence: text('competitor_intelligence'), // JSON string with competitor intelligence
+  culturalContext: text('cultural_context'), // JSON string with cultural context
+  marketPositioning: text('market_positioning'), // JSON string with market positioning
+  contextWeights: text('context_weights'), // JSON string with context weights
   savedAt: timestamp('saved_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });

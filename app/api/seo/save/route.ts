@@ -24,6 +24,16 @@ const SaveTopicSchema = z.object({
   tone: z.enum(['professional', 'casual', 'friendly', 'authoritative', 'conversational', 'humorous', 'inspirational']).optional(),
   additionalContext: z.string().optional(),
   websiteUrl: z.string().url().optional().or(z.literal('')),
+  // Enhanced cultural context fields
+  languagePreference: z.enum(['english', 'cultural_english', 'native']).optional(),
+  formalityLevel: z.enum(['formal', 'professional', 'casual', 'slang_heavy']).optional(),
+  contentPurpose: z.enum(['marketing', 'educational', 'conversational', 'technical']).optional(),
+  brandVoiceAnalysis: z.any().optional(), // JSON object with brand voice analysis
+  businessOfferings: z.any().optional(), // JSON object with business offerings
+  competitorIntelligence: z.any().optional(), // JSON object with competitor intelligence
+  culturalContext: z.any().optional(), // JSON object with cultural context
+  marketPositioning: z.any().optional(), // JSON object with market positioning
+  contextWeights: z.any().optional(), // JSON object with context weights
 });
 
 export async function POST(request: NextRequest) {

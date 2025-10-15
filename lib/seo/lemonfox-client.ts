@@ -14,6 +14,13 @@ import {
   type CulturalAdaptationRequest,
   type CulturalPrompt
 } from './cultural-language-system';
+import {
+  synthesizeContext,
+  generateEnhancedPrompts,
+  type ContextSources,
+  type SynthesizedContext,
+  type ContextWeighting
+} from './context-synthesis';
 
 export interface LemonfoxGenerationRequest {
   model: string;
@@ -58,6 +65,12 @@ export interface CulturalGenerationRequest {
   contentPurpose: 'marketing' | 'educational' | 'conversational' | 'technical';
   targetAudience: string;
   businessType?: string;
+}
+
+interface TopicUserSettings {
+  tone?: string;
+  additionalContext?: string;
+  competitorUrls?: string[];
 }
 
 export class LemonfoxClient {
@@ -109,44 +122,31 @@ export class LemonfoxClient {
     seasonalTopics?: string[],
     competitorWebsites?: any[],
     competitorIntelligence?: CompetitiveIntelligenceReport,
-    culturalRequest?: CulturalGenerationRequest
+    culturalRequest?: CulturalGenerationRequest,
+    userSettings?: TopicUserSettings
   ): Promise<Array<{
     topic: string;
     reasoning: string;
-    source: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity' | 'market_opportunity' | 'competitive_gap';
+    source: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity' | 'market_opportunity' | 'competitive_gap' | 'strategic_positioning';
     relatedContent?: string;
     competitiveInsight?: string;
     marketPositioning?: string;
+    strategicContext?: string;
   }>> {
-    // Get location characteristics for enhanced context
-    const locationCharacteristics = location ? detectLocationCharacteristics(location) : null;
-    const locationContext = locationCharacteristics ?
-      generateLocationAwarePrompt(location!, locationCharacteristics, businessType) : '';
-
-    // Generate cultural adaptation if requested
-    let culturalPrompt: CulturalPrompt | null = null;
-    if (culturalRequest && location) {
-      const validatedRequest = validateCulturalRequest({
-        ...culturalRequest,
-        location,
-        targetAudience,
-        businessType
-      });
-      culturalPrompt = generateCulturalAdaptation(validatedRequest);
-      console.log('🌍 [LEMONFOX] Cultural adaptation generated:', {
-        location,
-        languagePreference: culturalRequest.languagePreference,
-        formalityLevel: culturalRequest.formalityLevel
-      });
-    }
+    console.log('🚀 [LEMONFOX] Starting enhanced SEO topic generation with context synthesis');
 
     // Extract detailed business offerings from website analysis
     let businessOfferings: BusinessOfferings | null = null;
     let brandAnalysis: BrandAnalysisInsights | null = null;
     let competitiveIntel: CompetitiveIntelligenceReport | null = null;
+    let culturalPrompt: CulturalPrompt | null = null;
+
+    // Get location characteristics for enhanced context
+    const locationCharacteristics = location ? detectLocationCharacteristics(location) : null;
 
     if (websiteAnalysis) {
       try {
+        // Extract business offerings
         businessOfferings = extractBusinessOfferings(websiteAnalysis);
         console.log('🏢 [LEMONFOX] Business offerings extracted:', {
           servicesCount: businessOfferings.services.length,
@@ -188,8 +188,186 @@ export class LemonfoxClient {
       }
     }
 
-    // Build enhanced system prompt with brand voice context
-    let systemPrompt = `You are an SEO topic generator for small local service businesses. Generate practical topics that customers actually search for.
+    // Generate cultural adaptation if requested
+    if (culturalRequest && location) {
+      try {
+        const validatedRequest = validateCulturalRequest({
+          ...culturalRequest,
+          location,
+          targetAudience,
+          businessType
+        });
+        culturalPrompt = generateCulturalAdaptation(validatedRequest);
+        console.log('🌍 [LEMONFOX] Cultural adaptation generated:', {
+          location,
+          languagePreference: culturalRequest.languagePreference,
+          formalityLevel: culturalRequest.formalityLevel
+        });
+      } catch (error) {
+        console.error('❌ [LEMONFOX] Failed to generate cultural adaptation:', error);
+      }
+    }
+
+    // Prepare context sources for synthesis
+    const contextSources: ContextSources = {
+      websiteAnalysis,
+      brandAnalysis: brandAnalysis || undefined,
+      competitorIntelligence: competitiveIntel || undefined,
+      businessOfferings: businessOfferings || undefined,
+      culturalPrompt: culturalPrompt || undefined,
+      culturalRequest: culturalRequest && location ? {
+        ...culturalRequest,
+        location: location
+      } : undefined,
+      location: location || undefined,
+      businessType: businessType || undefined,
+      targetAudience: targetAudience || undefined,
+      contentAnalysis: contentAnalysis || undefined,
+      tonePreference: userSettings?.tone,
+      languagePreference: culturalRequest?.languagePreference,
+      formalityPreference: culturalRequest?.formalityLevel,
+      contentPurpose: culturalRequest?.contentPurpose,
+      additionalContext: userSettings?.additionalContext,
+      competitorUrls: userSettings?.competitorUrls,
+      userTopic: topic
+    };
+
+    // Generate enhanced prompts using context synthesis
+    let systemPrompt: string;
+    let userPrompt: string;
+    let synthesizedContext: SynthesizedContext;
+
+    try {
+      const enhancedPrompts = generateEnhancedPrompts(
+        topic,
+        contextSources,
+        seasonalTopics,
+        // Custom weights to prioritize business offerings and competitor intelligence
+        {
+          businessOfferings: 0.25,
+          competitorIntelligence: 0.25,
+          brandVoice: 0.20,
+          culturalContext: 0.15,
+          location: 0.10,
+          marketPositioning: 0.05
+        }
+      );
+
+      systemPrompt = enhancedPrompts.systemPrompt;
+      userPrompt = enhancedPrompts.userPrompt;
+      synthesizedContext = enhancedPrompts.context;
+
+      console.log('🧠 [LEMONFOX] Context synthesis completed:', {
+        completeness: synthesizedContext.contextQuality.completeness,
+        confidence: synthesizedContext.contextQuality.confidence,
+        dataSources: synthesizedContext.contextQuality.dataSources.length,
+        conflicts: synthesizedContext.contextQuality.conflicts.length
+      });
+
+      // Log warnings about context quality issues
+      if (synthesizedContext.contextQuality.conflicts.length > 0) {
+        console.warn('⚠️ [LEMONFOX] Context conflicts detected:', synthesizedContext.contextQuality.conflicts);
+      }
+
+      if (synthesizedContext.contextQuality.recommendations.length > 0) {
+        console.info('ℹ️ [LEMONFOX] Context recommendations:', synthesizedContext.contextQuality.recommendations);
+      }
+
+    } catch (error) {
+      console.error('❌ [LEMONFOX] Context synthesis failed, falling back to basic prompts:', error);
+
+      // Create a minimal fallback context for when synthesis fails
+      synthesizedContext = {
+        businessIdentity: {
+          type: businessType,
+          location: location || '',
+          primaryOfferings: [],
+          uniqueValueProps: [],
+          targetAudience: targetAudience
+        },
+        brandVoice: {
+          primaryTone: 'professional',
+          formalityLevel: 'professional',
+          languageStyle: 'professional',
+          keyPhrases: [],
+          communicationPerspective: 'third-person',
+          coreValues: []
+        },
+        competitiveStrategy: {
+          marketPositioning: [],
+          contentGapsToTarget: [],
+          marketOpportunities: [],
+          competitiveAdvantages: [],
+          strategicDifferentiation: [],
+          competitorThreats: [],
+          counterPositioning: [],
+          comparisonOpportunities: []
+        },
+        contentStrategy: {
+          topicPriorities: [],
+          contentAngles: [],
+          strategicKeywords: [],
+          serviceSpecificTopics: [],
+          locationSpecificTopics: []
+        },
+        culturalContext: {
+          communicationStyle: 'professional',
+          culturalNuances: [],
+          languageGuidelines: [],
+          formalityRequirements: [],
+          localReferences: [],
+          avoidances: []
+        },
+        strategicInstructions: {
+          topicGeneration: [
+            `Generate topics specifically for ${businessType} business serving ${targetAudience}`,
+            `Focus on location-specific topics when possible: ${location || 'general area'}`
+          ],
+          contentCreation: [
+            `Write in professional tone with clear, actionable content`,
+            `Address specific customer needs and pain points`
+          ],
+          competitivePositioning: [
+            `Differentiate from competitors through unique value propositions`,
+            `Emphasize quality and reliability`
+          ],
+          culturalAdaptation: [
+            `Use culturally appropriate language and examples`,
+            `Consider local context and references`
+          ],
+          brandConsistency: [
+            `Maintain consistent brand voice throughout content`,
+            `Reflect professional business values`
+          ],
+          competitorCountering: [
+            `Address competitor advantages with strategic counter-positioning`,
+            `Highlight unique differentiators that competitors lack`
+          ],
+          differentiationFocus: [
+            `Focus on unique value propositions and competitive advantages`,
+            `Emphasize what makes this business different from competitors`
+          ]
+        },
+        contextQuality: {
+          completeness: 0.5,
+          confidence: 0.5,
+          dataSources: ['fallback'],
+          conflicts: [],
+          recommendations: ['Context synthesis failed - using fallback']
+        },
+        userPreferences: {
+          desiredTone: userSettings?.tone || 'professional',
+          languagePreference: culturalRequest?.languagePreference || 'english',
+          formalityPreference: culturalRequest?.formalityLevel || 'professional',
+          contentPurpose: culturalRequest?.contentPurpose || 'marketing',
+          additionalContext: userSettings?.additionalContext,
+          competitorUrls: userSettings?.competitorUrls || [],
+          brandToneReference: 'professional'
+        }
+      };
+
+      // Fallback to basic prompt generation if context synthesis fails
+      systemPrompt = `You are an expert SEO topic generator for small local service businesses. Generate practical, business-relevant topics that customers actually search for.
 
 CRITICAL RULES:
 - Respond with ONLY a numbered list of topics and their reasoning
@@ -200,300 +378,57 @@ CRITICAL RULES:
 - Generate exactly 10-15 topics
 - Format: "Topic Title | Specific Reasoning | Source"
 - Topics must be complete sentences ending with proper punctuation
-- Focus on local search and practical customer problems
+- Topic titles must NOT include source identifiers, numbers, or reasoning text
+- Topic titles should be clear, descriptive business topics (not technical identifiers)
+- Focus on local search and practical customer problems with location-aware insights
 - Include seasonal topics when relevant
 - Emphasize voice search and mobile-friendly topics
-- Source must be one of: website_gap, competitor_advantage, content_opportunity, ai`;
+- When location context exists, include at least 2 globally adaptable or region-scalable topics that tie back to local insights
+- Reasoning must reference competitive advantages, counter competitor threats, or highlight market opportunities
+- Align topic suggestions with requested tone: ${userSettings?.tone || 'professional'}
+- Keep content purpose in mind: ${culturalRequest?.contentPurpose || 'marketing'}
+- Prioritize hyperlocal coverage (neighborhoods, ZIP codes, landmarks) alongside city-wide authority plays
+- Include at least one topic for building local reputation (reviews, testimonials, community partnerships)
+- Suggest content aimed at Google Business Profile optimization, local landing pages, and map pack visibility
+- Source must be one of: website_gap, competitor_advantage, content_opportunity, market_opportunity, competitive_gap, strategic_positioning, competitor_counter, differentiation_focus
+- AVOID generic topics - make them specific to ${businessType} and ${targetAudience}
 
-    // Add brand voice requirements if available
-    if (brandAnalysis) {
-      const { brandVoiceProfile } = brandAnalysis;
-      systemPrompt += `
+TOPIC QUALITY REQUIREMENTS:
+- Each topic must be a complete, actionable title
+- Topics should address specific customer problems or questions
+- Include location-specific elements when possible
+- Reference regional or global relevance in the reasoning when appropriate
+- Mention competitor considerations when relevant to the topic focus
+- Call out whether the intent is hyperlocal, service-area, or regional/global in the reasoning
+- Avoid generic filler content
+- Make topics sound like they were written by a business owner, not an AI
 
-BRAND VOICE REQUIREMENTS:
-- Match the ${brandVoiceProfile.primaryTone} tone of the business
-- Use ${brandVoiceProfile.formalityLevel} language consistently
-- Write with ${brandVoiceProfile.complexityLevel} complexity
-- Use ${brandVoiceProfile.sentenceStructure} sentence structures
-- Adopt a ${brandVoiceProfile.perspective} perspective
-- Incorporate key phrases naturally: ${brandVoiceProfile.keyPhrases.slice(0, 5).join(', ')}
-- Use brand terminology: ${brandVoiceProfile.uniqueTerminology.slice(0, 3).join(', ')}
-- Reflect core values: ${brandVoiceProfile.coreValues.slice(0, 3).join(', ')}`;
-    }
+EXAMPLE OF GOOD FORMAT:
+"1. How to Choose the Best Plumber for Emergency Repairs in Your Area | Hyperlocal intent with differentiation plus review-driven trust builders | competitor_advantage"
+"2. Complete Guide to Home Plumbing Maintenance for Homeowners | Seasonal demand play that fuels Google Business Profile updates and neighborhood guides | market_opportunity"`;
 
-    // Add competitor intelligence requirements if available
-    if (competitiveIntel) {
-      const { marketAnalysis, competitiveGaps, strategicRecommendations, swotAnalysis } = competitiveIntel;
-      systemPrompt += `
-
-COMPETITIVE INTELLIGENCE REQUIREMENTS:
-- Market size: ${marketAnalysis.totalMarketSize} estimated monthly searches
-- Market leaders: ${marketAnalysis.marketLeaders.join(', ')}
-- Emerging trends: ${marketAnalysis.emergingTrends.slice(0, 3).join(', ')}
-- Content gaps to target: ${competitiveGaps.contentGaps.slice(0, 4).join(', ')}
-- Strategic focus: ${strategicRecommendations.topicPriorities.slice(0, 3).join(', ')}
-
-COMPETITIVE POSITIONING:
-- Strengths to leverage: ${swotAnalysis.strengths.slice(0, 2).join(', ')}
-- Opportunities to pursue: ${swotAnalysis.opportunities.slice(0, 2).join(', ')}
-- Competitive advantages: ${strategicRecommendations.differentiationTactics.slice(0, 2).join(', ')}
-
-ADVANCED TOPIC SOURCES:
-- market_opportunity: Topics based on emerging market trends
-- competitive_gap: Topics that competitors are missing but market wants
-- strategic_positioning: Topics that leverage your unique strengths`;
-    }
-
-    // Add cultural adaptation instructions if available
-    if (culturalPrompt) {
-      systemPrompt += `
-
-${culturalPrompt.languageInstructions}
-
-${culturalPrompt.culturalInstructions}
-
-${culturalPrompt.formalityGuidelines}
-
-${culturalPrompt.slangGuidelines}
-
-CRITICAL CULTURAL REQUIREMENTS:
-- Generate topics that resonate with local cultural values and communication styles
-- Use appropriate level of formality for the target audience
-- Incorporate local slang and expressions naturally where appropriate
-- Reference local cultural events, seasons, and context
-- Avoid culturally inappropriate topics or expressions
-- Consider local business practices and customer expectations
-
-CULTURAL EXAMPLES TO FOLLOW:
-${culturalPrompt.examples.slice(0, 3).map(example => `- ${example}`).join('\n')}
-
-TOPICS TO AVOID:
-${culturalPrompt.avoidances.slice(0, 5).map(avoidance => `- ${avoidance}`).join('\n')}`;
-    }
-
-    systemPrompt += `
-
-IMPORTANT: Focus on the business's ACTUAL services and products:
-- Generate topics specifically related to the services/products the business offers
-- Reference specific service features, benefits, and use cases
-- Create topics that address customer problems solved by their offerings
-- Include comparison topics for their specific services vs alternatives
-- Emphasize their unique value propositions and differentiators
-- Topics should help the business attract customers for their specific offerings
-
-SERVICE-SPECIFIC REQUIREMENTS:
-- Each topic should be directly relevant to at least one service/product offered
-- Include topics that explain the value and benefits of specific services
-- Create "how-to" topics for problems their services solve
-- Generate comparison topics for their service categories
-- Include location-specific variations of their service offerings
-- Address emergency/urgent needs for services they provide
-
-LOCATION-AWARENESS REQUIREMENTS:
-- Use local terminology and cultural references naturally
-- Consider seasonal patterns relevant to the location (no winter topics for tropical climates)
-- Address infrastructure challenges and local pain points
-- Reflect local business practices and customer expectations
-- Avoid generic topics that don't match the location's reality
-
-Sources:
-- website_gap: Addresses missing content for their specific services
-- competitor_advantage: Helps compete with local competitors for their services
-- content_opportunity: Builds on their existing service content
-- market_opportunity: Topics based on emerging market trends and opportunities
-- competitive_gap: Topics that competitors are missing but market wants
-- strategic_positioning: Topics that leverage your unique strengths
-- ai: General service-related topic suggestion`;
-
-    let prompt = `Business: ${businessType}
+      userPrompt = `Business: ${businessType}
 Audience: ${targetAudience}${location ? `\nLocation: ${location}` : ''}
-Base topic: ${topic}${seasonalTopics && seasonalTopics.length > 0 ? `\nSeasonal Focus: ${seasonalTopics.slice(0, 3).join(', ')}` : ''}`;
+Base topic: ${topic}${seasonalTopics && seasonalTopics.length > 0 ? `\nSeasonal Focus: ${seasonalTopics.slice(0, 3).join(', ')}` : ''}
 
-    // Add location-aware context if available
-    if (locationContext) {
-      prompt += `
-${locationContext}`;
+Geographic directive: ${location ? `Prioritize hyper-local needs in ${location}, highlighting neighborhoods, ZIP codes, or landmarks, while adding 2 globally adaptable topics grounded in local insight.` : 'No fixed location provided. Create topics that can flex between regional and global audiences, referencing cultural cues when available, and note how they localize.'}
+Competitive directive: Reference differentiation against known competitor strengths whenever possible.
+Local SEO directive: Include ideas that power Google Business Profile updates, local landing pages, map pack prominence, and reputation-building campaigns.
+Tone directive: Match the requested tone of "${userSettings?.tone || 'professional'}" while staying authentic to the brand.
+Content purpose emphasis: ${culturalRequest?.contentPurpose || 'marketing'}.
+${userSettings?.additionalContext ? `Additional context: ${userSettings.additionalContext}` : ''}
+${userSettings?.competitorUrls && userSettings.competitorUrls.length > 0 ? `Competitors provided: ${userSettings.competitorUrls.join(', ')}` : ''}
+
+IMPORTANT: Generate 10-15 specific, business-relevant SEO topics. Each topic should be a complete, actionable title that ${targetAudience} would actually search for.
+
+Start your response with "1." and follow the format exactly.`;
     }
 
-    // Add brand voice context to the main prompt
-    if (brandAnalysis) {
-      const { brandVoiceProfile, personalizationRecommendations } = brandAnalysis;
-      prompt += `
-
-BRAND VOICE CONTEXT:
-**Primary Tone:** ${brandVoiceProfile.primaryTone}
-**Language Style:** ${brandVoiceProfile.formalityLevel} and ${brandVoiceProfile.complexityLevel}
-**Key Brand Phrases:** ${brandVoiceProfile.keyPhrases.slice(0, 6).join(', ')}
-**Unique Terminology:** ${brandVoiceProfile.uniqueTerminology.slice(0, 4).join(', ')}
-**Core Values:** ${brandVoiceProfile.coreValues.join(', ')}
-**Communication Perspective:** ${brandVoiceProfile.perspective}
-
-**TOPIC GENERATION BRAND REQUIREMENTS:**
-${personalizationRecommendations.topicGeneration.map(rec => `- ${rec}`).join('\n')}`;
-    }
-
-    // Add competitor intelligence context to the main prompt
-    if (competitiveIntel) {
-      const { marketAnalysis, competitiveGaps, strategicRecommendations, swotAnalysis } = competitiveIntel;
-      prompt += `
-
-COMPETITIVE INTELLIGENCE CONTEXT:
-**Market Leaders:** ${marketAnalysis.marketLeaders.join(', ')}
-**Emerging Trends:** ${marketAnalysis.emergingTrends.slice(0, 4).join(', ')}
-**Content Gaps to Target:** ${competitiveGaps.contentGaps.slice(0, 5).join(', ')}
-**Service Gaps:** ${competitiveGaps.serviceGaps.slice(0, 3).join(', ')}
-**Strategic Topic Priorities:** ${strategicRecommendations.topicPriorities.slice(0, 4).join(', ')}
-
-**COMPETITIVE ADVANTAGES:**
-${strategicRecommendations.differentiationTactics.map(rec => `- ${rec}`).join('\n')}
-
-**MARKET OPPORTUNITIES:**
-${swotAnalysis.opportunities.slice(0, 4).map(opp => `- ${opp}`).join('\n')}
-
-**COMPETITIVE TOPIC REQUIREMENTS:**
-- Generate topics that address identified content gaps
-- Create content that leverages your strengths against competitor weaknesses
-- Focus on emerging trends that competitors haven't capitalized on
-- Develop topics that highlight your unique value propositions`;
-    }
-
-    // Add detailed business offerings context if available
-    if (businessOfferings) {
-      const servicesList = businessOfferings.services.slice(0, 8).map(s =>
-        `- ${s.name} (${s.category}): ${s.description}${s.urgencyLevel === 'emergency' ? ' [EMERGENCY]' : ''}`
-      ).join('\n');
-
-      const productsList = businessOfferings.products.slice(0, 5).map(p =>
-        `- ${p.name} (${p.category}): ${p.description}`
-      ).join('\n');
-
-      prompt += `
-
-BUSINESS OFFERINGS ANALYSIS:
-**Business Type:** ${businessOfferings.businessType}
-**Primary Categories:** ${businessOfferings.primaryCategories.join(', ')}
-**Target Audiences:** ${businessOfferings.targetAudiences.join(', ')}
-**Value Propositions:** ${businessOfferings.valuePropositions.join(', ')}
-**Unique Selling Points:** ${businessOfferings.uniqueSellingPoints.join(', ')}
-
-**SERVICES OFFERED:**
-${servicesList || 'No specific services identified'}
-
-**PRODUCTS OFFERED:**
-${productsList || 'No specific products identified'}
-
-**EMERGENCY SERVICES:**
-${businessOfferings.emergencyServices.length > 0 ? businessOfferings.emergencyServices.join(', ') : 'No emergency services'}
-
-**SERVICE AREAS:**
-${businessOfferings.serviceAreas.join(', ') || 'Local service area'}
-
-**SERVICE GENERATION REQUIREMENTS:**
-- Generate topics specifically for the services and products listed above
-- Reference specific service features, benefits, and use cases in your reasoning
-- Create topics that address customer problems solved by these specific offerings
-- Include comparison topics for their services vs alternatives
-- Emphasize their unique value propositions and differentiators
-- For emergency services, include urgent/emergency topic variations
-- All topics must be directly relevant to at least one offering above`;
-    }
-
-    // Extract competitor business offerings if competitor analysis is available
-    let competitorOfferings: BusinessOfferings | null = null;
-    if (contentAnalysis?.competitorAnalysis && websiteAnalysis?.crawledPages) {
-      try {
-        // Create a mock website analysis for competitor to extract their offerings
-        // In a real implementation, you'd have separate competitor website analysis data
-        const competitorKeywords = contentAnalysis.competitorAnalysis.missingTopics || [];
-        if (competitorKeywords.length > 0) {
-          // Create a simplified competitor offerings analysis based on their topics
-          competitorOfferings = {
-            services: competitorKeywords.slice(0, 5).map((topic: string) => ({
-              name: topic,
-              category: 'unknown',
-              description: `Service identified from competitor analysis`,
-              targetAudience: ['business customers'],
-              features: [],
-              urgencyLevel: 'routine' as const,
-              localService: false
-            })),
-            products: [],
-            businessType: 'competitor business',
-            primaryCategories: ['services'],
-            valuePropositions: [],
-            targetAudiences: ['customers'],
-            serviceAreas: [],
-            emergencyServices: [],
-            uniqueSellingPoints: []
-          };
-        }
-      } catch (error) {
-        console.error('❌ [LEMONFOX] Failed to extract competitor offerings:', error);
-      }
-    }
-
-    // Add website-specific context if available (content analysis)
-    if (websiteAnalysis && contentAnalysis) {
-      const gaps = contentAnalysis.contentGaps?.slice(0, 5).map((gap: any) =>
-        `${gap.topic}: ${gap.reason} (priority: ${gap.priority})`
-      ).join(', ') || '';
-
-      const competitorGaps = contentAnalysis.competitorAnalysis?.missingTopics?.slice(0, 5).join(', ') || '';
-      const opportunities = contentAnalysis.keywordOpportunities?.slice(0, 5).map((opp: any) =>
-        `${opp.keyword} (current: ${opp.currentUsage}, potential: ${opp.potentialUsage})`
-      ).join(', ') || '';
-
-      // Add existing content strengths
-      const existingTopics = websiteAnalysis.topics?.slice(0, 5).join(', ') || '';
-      const highPriorityTopics = contentAnalysis.contentGaps?.filter((gap: any) => gap.priority === 'high')
-        .map((gap: any) => gap.topic).slice(0, 3).join(', ') || '';
-
-      prompt += `
-
-WEBSITE CONTENT ANALYSIS:
-**Current Content Topics:** ${existingTopics}
-**High Priority Content Gaps:** ${highPriorityTopics || 'None identified'}
-**Content Gaps:** ${gaps || 'None identified'}
-**Keyword Opportunities:** ${opportunities || 'No specific opportunities identified'}
-
-**CONTENT REQUIREMENTS:**
-- Generate topics that address the specific content gaps identified
-- Reference existing content to build comprehensive topic clusters
-- Target keyword opportunities with relevant, service-specific content`;
-    }
-
-    // Add competitor analysis if available
-    if (competitorOfferings || contentAnalysis?.competitorAnalysis) {
-      const competitorServices = competitorOfferings?.services.slice(0, 5).map(s =>
-        `- ${s.name}: ${s.description}`
-      ).join('\n') || '';
-
-      const competitorAdvantages = contentAnalysis?.competitorAnalysis?.opportunities?.slice(0, 3).join('\n- ') || '';
-
-      prompt += `
-
-COMPETITOR ANALYSIS:
-**Competitor Services/Topics:**
-${competitorServices || contentAnalysis?.competitorAnalysis?.missingTopics?.slice(0, 5).map((t: string) => `- ${t}`).join('\n') || 'No specific competitor services identified'}
-
-**Competitor Advantages to Address:**
-${competitorAdvantages ? '- ' + competitorAdvantages : 'No specific advantages identified'}
-
-**COMPETITIVE REQUIREMENTS:**
-- Create topics that help compete with competitor offerings
-- Address gaps where competitors have content but you don't
-- Emphasize your unique value propositions compared to competitors
-- Generate comparison topics that highlight your advantages`;
-    }
-
-    prompt += `
-
-Generate 10-15 SEO topics with reasoning now. Start with "1."`;
-
+    // Make the API call with enhanced prompts
     try {
       const response = await this.generateCompletion({
         model: 'lemonfox-70b',
-        prompt,
+        prompt: userPrompt,
         system_prompt: systemPrompt,
         max_tokens: 2000,
         temperature: 0.3,
@@ -501,34 +436,447 @@ Generate 10-15 SEO topics with reasoning now. Start with "1."`;
 
       const content = response.choices[0]?.message?.content || '';
 
-      // Parse the new format: "Topic | Reasoning | Source"
-      let topicsWithReasoning = this.parseTopicsWithReasoning(content);
+      console.log('🤖 [LEMONFOX] Enhanced AI response received:', {
+        contentLength: content.length,
+        promptTokens: userPrompt.length,
+        systemPromptTokens: systemPrompt.length
+      });
 
-      // If parsing fails, fallback to regular topics with specific reasoning based on content analysis
+      // Parse the enhanced format: "Topic | Reasoning | Source"
+      let topicsWithReasoning = this.parseTopicsWithReasoningEnhanced(content, synthesizedContext, topic, businessType, targetAudience);
+
+      // If parsing fails, fallback to basic topics with enhanced reasoning based on synthesized context
       if (topicsWithReasoning.length < 5) {
-            const basicTopics = this.extractTopicsWithRegex(content);
+        const basicTopics = this.extractTopicsWithRegex(
+          content,
+          businessType,
+          targetAudience,
+          synthesizedContext.businessIdentity.location
+        );
         topicsWithReasoning = basicTopics.map(t => ({
           topic: t,
-          reasoning: this.generateSpecificReasoning(t, businessType, targetAudience, contentAnalysis, websiteAnalysis),
-          source: this.determineTopicSource(t, contentAnalysis, websiteAnalysis)
+          reasoning: this.generateEnhancedSpecificReasoning(t, businessType, targetAudience, synthesizedContext),
+          source: this.determineTopicSourceEnhanced(t, synthesizedContext)
         }));
       }
 
-      // Final fallback - generate basic topics ourselves if AI completely fails
+      // Final fallback - generate enhanced topics ourselves if AI completely fails
       if (topicsWithReasoning.length === 0) {
-              const fallbackTopics = this.generateFallbackTopics(topic, businessType, targetAudience, location);
+        const fallbackTopics = this.generateEnhancedFallbackTopics(topic, businessType, targetAudience, location || '', synthesizedContext);
         topicsWithReasoning = fallbackTopics.map(t => ({
-          topic: t,
-          reasoning: this.generateSpecificReasoning(t, businessType, targetAudience, contentAnalysis, websiteAnalysis),
-          source: this.determineTopicSource(t, contentAnalysis, websiteAnalysis)
+          topic: t.topic,
+          reasoning: t.reasoning,
+          source: t.source,
+          relatedContent: t.relatedContent,
+          competitiveInsight: t.competitiveInsight,
+          marketPositioning: t.marketPositioning,
+          strategicContext: t.strategicContext
         }));
       }
+
+      console.log('✅ [LEMONFOX] Enhanced topic generation completed:', {
+        topicsGenerated: topicsWithReasoning.length,
+        sources: [...new Set(topicsWithReasoning.map(t => t.source))],
+        averageConfidence: synthesizedContext.contextQuality.confidence
+      });
 
       return topicsWithReasoning.slice(0, 15);
     } catch (error) {
-      console.error('Error generating SEO topics:', error);
-      throw new Error('Failed to generate SEO topics');
+      console.error('❌ [LEMONFOX] Error in enhanced topic generation:', error);
+      throw new Error('Failed to generate SEO topics with enhanced context synthesis');
     }
+  }
+
+  /**
+   * Enhanced topic parsing with support for new context sources
+   */
+  private parseTopicsWithReasoningEnhanced(content: string, context: SynthesizedContext, topic: string, businessType: string, targetAudience: string): Array<{
+    topic: string;
+    reasoning: string;
+    source: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity' | 'market_opportunity' | 'competitive_gap' | 'strategic_positioning';
+    relatedContent?: string;
+    competitiveInsight?: string;
+    marketPositioning?: string;
+    strategicContext?: string;
+  }> {
+    const topics: Array<{
+      topic: string;
+      reasoning: string;
+      source: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity' | 'market_opportunity' | 'competitive_gap' | 'strategic_positioning';
+      relatedContent?: string;
+      competitiveInsight?: string;
+      marketPositioning?: string;
+      strategicContext?: string;
+    }> = [];
+
+    const lines = content.split('\n').filter(line => line.trim());
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+
+      // Skip empty lines and headers
+      if (!trimmed ||
+          trimmed.toLowerCase().includes('here are') ||
+          trimmed.toLowerCase().includes('based on') ||
+          !/^\d+\./.test(trimmed)) {
+        continue;
+      }
+
+      // Try to parse the format: "1. Topic | Reasoning | Source"
+      const match = trimmed.match(/^\d+\.\s*(.+)$/);
+      if (!match) continue;
+
+      const topicContent = match[1];
+
+      // Try to split by pipe character
+      const parts = topicContent.split('|').map(p => p.trim());
+
+      if (parts.length >= 3) {
+        // Extract the topic title (first part)
+        let topicText = parts[0].trim();
+        const reasoning = parts[1].trim();
+        const sourceText = parts[2].toLowerCase();
+
+        // Enhanced cleaning: Use the new enhanced cleaning method with generic detection
+        topicText = this.cleanTopicTitleEnhanced(topicText, businessType, targetAudience, context.businessIdentity.location);
+
+        // Enhanced source validation with new sources
+        let source: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity' | 'market_opportunity' | 'competitive_gap' | 'strategic_positioning';
+        if (sourceText.includes('strategic_positioning')) {
+          source = 'strategic_positioning';
+        } else if (sourceText.includes('competitive_gap')) {
+          source = 'competitive_gap';
+        } else if (sourceText.includes('market_opportunity')) {
+          source = 'market_opportunity';
+        } else if (sourceText.includes('competitor') || sourceText.includes('advantage')) {
+          source = 'competitor_advantage';
+        } else if (sourceText.includes('opportunity') || sourceText.includes('content')) {
+          source = 'content_opportunity';
+        } else if (sourceText.includes('website_gap')) {
+          source = 'website_gap';
+        } else {
+          source = 'ai';
+        }
+
+        // Validate reasoning specificity - reject generic reasoning
+        if (this.isGenericReasoning(reasoning) && source !== 'ai') {
+          console.warn(`⚠️ Generic reasoning detected for non-AI topic: "${reasoning}" - marking as AI`);
+          source = 'ai';
+        }
+
+        // Enhanced topic validation - ensure it looks like a real topic, not a source identifier
+        const isTopicValid = topicText.length > 10 && topicText.length < 200 &&
+          !topicText.includes('source:') &&
+          !topicText.includes('reasoning:') &&
+          !topicText.includes('advantage:') &&
+          !topicText.includes('opportunity:') &&
+          !topicText.includes('gap:') &&
+          !topicText.match(/\b(competitor_advantage|website_gap|content_opportunity|strategic_positioning|market_opportunity|competitive_gap)\b/gi) &&
+          !topicText.match(/^\s*\w+_(advantage|gap|opportunity|positioning)\s*$/gi) &&
+          !topicText.match(/^\s*\(Source:\s*[^)]+\)\s*$/gi) && // Remove (Source: ...) patterns
+          (topicText.endsWith('.') || topicText.endsWith('?') || topicText.endsWith('!') || topicText.length > 20);
+
+        if (isTopicValid && reasoning.length > 10) {
+          console.log(`✅ [LEMONFOX] Valid topic parsed: "${topicText}" (source: ${source})`);
+          topics.push({
+            topic: topicText,
+            reasoning: reasoning,
+            source,
+            relatedContent: parts[3] || undefined,
+            competitiveInsight: parts[4] || undefined,
+            marketPositioning: parts[5] || undefined,
+            strategicContext: this.generateStrategicContext(context, topicText, source)
+          });
+        } else {
+          console.warn(`⚠️ [LEMONFOX] Invalid topic filtered out: "${topicText}" (length: ${topicText.length}, contains source: ${topicText.includes('source:')}, validLength: ${topicText.length > 10 && topicText.length < 200})`);
+        }
+      } else if (parts.length === 1) {
+        // Fallback: just the topic, add basic reasoning
+        let topicText = parts[0].trim();
+
+        // Apply the SAME enhanced cleaning as the main parsing path
+        topicText = this.cleanTopicTitleEnhanced(topicText, businessType, targetAudience, context.businessIdentity.location);
+
+        // More lenient validation for fallback, but still filter out source identifiers
+        const isTopicValid = topicText.length > 10 && topicText.length < 200 &&
+          !topicText.includes('source:') &&
+          !topicText.includes('reasoning:') &&
+          !topicText.includes('advantage:') &&
+          !topicText.includes('opportunity:') &&
+          !topicText.includes('gap:') &&
+          !topicText.match(/\b(competitor_advantage|website_gap|content_opportunity|strategic_positioning|market_opportunity|competitive_gap)\b/gi) &&
+          !topicText.match(/^\s*\w+_(advantage|gap|opportunity|positioning)\s*$/gi) &&
+          !topicText.match(/^\s*\(Source:\s*[^)]+\)\s*$/gi) && // Remove (Source: ...) patterns
+          (!topicText.includes('reasoning') && !topicText.includes('advantage') && !topicText.includes('opportunity')) &&
+          (topicText.endsWith('.') || topicText.endsWith('?') || topicText.endsWith('!') || topicText.length > 20);
+
+        if (isTopicValid) {
+          console.log(`✅ [LEMONFOX] Valid fallback topic parsed: "${topicText}" (source: ai)`);
+          topics.push({
+            topic: topicText,
+            reasoning: this.generateEnhancedSpecificReasoning(topic, businessType, targetAudience, context),
+            source: 'ai',
+            relatedContent: undefined,
+            competitiveInsight: undefined,
+            marketPositioning: undefined,
+            strategicContext: this.generateStrategicContext(context, topicText, 'ai')
+          });
+        } else {
+          console.warn(`⚠️ [LEMONFOX] Invalid fallback topic filtered out: "${topicText}" (length: ${topicText.length}, contains patterns: ${topicText.includes('source:') || topicText.includes('advantage:') || topicText.includes('opportunity:')})`);
+        }
+      }
+    }
+
+    return topics;
+  }
+
+  /**
+   * Enhanced reasoning generation using synthesized context
+   */
+  private generateEnhancedSpecificReasoning(
+    topic: string,
+    businessType: string,
+    targetAudience: string,
+    context: SynthesizedContext
+  ): string {
+    const { businessIdentity, brandVoice, competitiveStrategy, contentStrategy } = context;
+    const topicLower = topic.toLowerCase();
+
+    // Check for direct business offering matches
+    if (businessIdentity.primaryOfferings.some(offering =>
+      topicLower.includes(offering.toLowerCase()) || offering.toLowerCase().includes(topicLower)
+    )) {
+      const matchingOffering = businessIdentity.primaryOfferings.find(offering =>
+        topicLower.includes(offering.toLowerCase()) || offering.toLowerCase().includes(topicLower)
+      );
+      if (matchingOffering) {
+        return `This topic directly promotes your ${matchingOffering} service, addressing specific customer needs and driving qualified leads for ${targetAudience} in the ${businessIdentity.location || 'your service area'}.`;
+      }
+    }
+
+    // Check for competitive positioning opportunities
+    if (competitiveStrategy.contentGapsToTarget.some(gap =>
+      topicLower.includes(gap.toLowerCase()) || gap.toLowerCase().includes(topicLower)
+    )) {
+      const matchingGap = competitiveStrategy.contentGapsToTarget.find(gap =>
+        topicLower.includes(gap.toLowerCase()) || gap.toLowerCase().includes(topicLower)
+      );
+      if (matchingGap) {
+        return `This addresses the critical content gap "${matchingGap}" that competitors have covered but you're missing, helping you compete effectively in the ${businessIdentity.type} market.`;
+      }
+    }
+
+    // Check for market opportunity alignment
+    if (competitiveStrategy.marketOpportunities.some(opp =>
+      topicLower.includes(opp.toLowerCase()) || opp.toLowerCase().includes(topicLower)
+    )) {
+      const matchingOpportunity = competitiveStrategy.marketOpportunities.find(opp =>
+        topicLower.includes(opp.toLowerCase()) || opp.toLowerCase().includes(topicLower)
+      );
+      if (matchingOpportunity) {
+        return `This topic leverages the emerging market opportunity "${matchingOpportunity}" that competitors haven't capitalized on, positioning you as an early mover in the ${businessIdentity.type} space.`;
+      }
+    }
+
+    // Add strategic context from business identity
+    const businessContext = businessIdentity.uniqueValueProps.length > 0
+      ? `These topics help differentiate ${businessIdentity.type} by highlighting ${businessIdentity.uniqueValueProps.join(', ')} for ${targetAudience}.`
+      : `These topics specifically address ${targetAudience} needs in the ${businessIdentity.type} market.`;
+
+    // Add cultural and location context if available
+    let contextualEnhancement = '';
+    if (businessIdentity.location) {
+      contextualEnhancement += ` Located in ${businessIdentity.location}, this content will resonate with local customer needs and search patterns.`;
+    }
+
+    if (context.culturalContext.culturalNuances.length > 0) {
+      contextualEnhancement += ` Incorporates ${context.culturalContext.culturalNuances.slice(0, 2).join(', ')} for cultural resonance.`;
+    }
+
+    // Combine with business context
+    const businessFocus = businessIdentity.primaryOfferings.length > 0
+      ? `Focus on these specific offerings: ${businessIdentity.primaryOfferings.slice(0, 3).join(', ')}`
+      : `Focus on ${businessIdentity.type} services and customer needs.`;
+
+    return `${businessContext} ${businessFocus} ${contextualEnhancement} This topic will help attract and convert customers by addressing their specific needs.`;
+  }
+
+  /**
+   * Generate strategic context explanation for enhanced reasoning
+   */
+  private generateStrategicContext(
+    context: SynthesizedContext,
+    topic: string,
+    source: string
+  ): string {
+    const { businessIdentity, brandVoice, competitiveStrategy, contentStrategy } = context;
+
+    switch (source) {
+      case 'strategic_positioning':
+        return `Strategic positioning: ${competitiveStrategy.marketPositioning.slice(0, 2).join(', ')} leveraging your unique strengths in ${businessIdentity.type}.`;
+
+      case 'competitive_gap':
+        return `Competitive gap: This topic fills a content gap that competitors have missed, giving you first-mover advantage in the ${businessIdentity.type} market.`;
+
+      case 'market_opportunity':
+        return `Market opportunity: Capitalizes on emerging trends and opportunities that competitors haven't capitalized on yet.`;
+
+      case 'competitor_advantage':
+        return `Competitive advantage: This helps you differentiate from competitors and gain market share in ${businessIdentity.location || 'your service area'}.`;
+
+      case 'website_gap':
+        return `Website gap: This addresses missing content on your website that customers are actively searching for.`;
+
+      case 'content_opportunity':
+        return `Content opportunity: This builds on your existing content to strengthen topical authority and internal linking.`;
+
+      default:
+        return `AI-generated topic based on comprehensive business context analysis.`;
+    }
+  }
+
+  /**
+   * Enhanced source determination with context weighting
+   */
+  private determineTopicSourceEnhanced(
+    topic: string,
+    context: SynthesizedContext
+  ): 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity' | 'market_opportunity' | 'competitive_gap' | 'strategic_positioning' {
+    const topicLower = topic.toLowerCase();
+    const { businessIdentity, competitiveStrategy, contentStrategy } = context;
+    const topicWords = topicLower.split(/\s+/).filter((w: string) => w.length > 2);
+
+    // Check strategic positioning first (highest priority)
+    if (competitiveStrategy.marketPositioning.some(pos =>
+      topicLower.includes(pos.toLowerCase()) || pos.toLowerCase().includes(topicLower)
+    )) {
+      return 'strategic_positioning';
+    }
+
+    // Check competitive gaps (high priority)
+    if (competitiveStrategy.contentGapsToTarget.some(gap =>
+      topicLower.includes(gap.toLowerCase()) || gap.toLowerCase().includes(topicLower)
+    )) {
+      return 'competitive_gap';
+    }
+
+    // Check market opportunities
+    if (competitiveStrategy.marketOpportunities.some(opp =>
+      topicLower.includes(opp.toLowerCase()) || opp.toLowerCase().includes(topicLower)
+    )) {
+      return 'market_opportunity';
+    }
+
+    // Check business offering relevance
+    if (businessIdentity.primaryOfferings.some(offering =>
+      topicLower.includes(offering.toLowerCase()) || offering.toLowerCase().includes(topicLower)
+    )) {
+      return 'website_gap';
+    }
+
+    // Check content strategy priorities
+    if (contentStrategy.topicPriorities.some(priority =>
+      topicLower.includes(priority.toLowerCase()) || priority.toLowerCase().includes(topicLower)
+    )) {
+      return 'content_opportunity';
+    }
+
+    // Default to AI if no specific matches found
+    return 'ai';
+  }
+
+  /**
+   * Enhanced fallback topic generation with context synthesis
+   */
+  private generateEnhancedFallbackTopics(
+    baseTopic: string,
+    businessType: string,
+    targetAudience: string,
+    location: string,
+    context: SynthesizedContext
+  ): Array<{
+    topic: string;
+    reasoning: string;
+    source: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity' | 'market_opportunity' | 'competitive_gap' | 'strategic_positioning';
+    relatedContent?: string;
+    competitiveInsight?: string;
+    marketPositioning?: string;
+    strategicContext?: string;
+  }> {
+    const { businessIdentity, contentStrategy, competitiveStrategy, brandVoice, culturalContext } = context;
+    const locationText = location ? ` in ${location}` : '';
+
+    // Generate strategic business-focused topics
+    const strategicTopics: Array<{
+      topic: string;
+      reasoning: string;
+      source: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity' | 'market_opportunity' | 'competitive_gap' | 'strategic_positioning';
+      relatedContent?: string;
+      competitiveInsight?: string;
+      marketPositioning?: string;
+      strategicContext?: string;
+    }> = [
+      {
+        topic: `${businessIdentity.type} Strategic Growth Guide for ${targetAudience}${locationText}`,
+        reasoning: `Strategic positioning in ${businessIdentity.type} market for ${targetAudience}`,
+        source: 'strategic_positioning',
+        relatedContent: 'Business growth and market leadership content',
+        competitiveInsight: `Leverage ${businessIdentity.primaryOfferings.slice(0, 2).join(', ')} for competitive advantage`,
+        marketPositioning: `Position as ${businessIdentity.type} market leader in ${location || 'your service area'}`,
+        strategicContext: `Aligns with ${businessIdentity.uniqueValueProps.slice(0, 2).join(', ')}`
+      },
+      {
+        topic: `Competitive Intelligence: ${businessIdentity.type} vs Competitors Analysis`,
+        reasoning: `Strategic competitive analysis to identify and exploit market opportunities in ${businessIdentity.location || 'your service area'}`,
+        source: 'competitive_gap',
+        relatedContent: 'Competitive analysis and market research content',
+        competitiveInsight: `Leverages ${competitiveStrategy.competitiveAdvantages.slice(0, 2).join(', ')} for differentiation`,
+        marketPositioning: `Position strategically against competitors in ${businessIdentity.location || 'your service area'}`,
+        strategicContext: `Uses ${competitiveStrategy.strategicDifferentiation.slice(0, 2).join(', ')}`
+      },
+      {
+        topic: `Market Opportunity: Emerging ${businessIdentity.type} Trends for ${targetAudience}`,
+        reasoning: `Capitalize on emerging market opportunities before competitors in ${businessIdentity.location || 'your service area'}`,
+        source: 'market_opportunity',
+        relatedContent: 'Market trend analysis and opportunity identification',
+        competitiveInsight: `Focus on ${competitiveStrategy.marketOpportunities.slice(0, 2).join(', ')} for growth`,
+        marketPositioning: `First-mover advantage in emerging ${businessIdentity.type} market`,
+        strategicContext: `Emphasizes ${competitiveStrategy.strategicDifferentiation.slice(0, 1).join(', ')}`
+      },
+      {
+        topic: `Customer-Centric ${businessIdentity.type} Solutions for ${targetAudience}`,
+        reasoning: `Focus on solving specific customer pain points with ${businessIdentity.primaryOfferings.slice(0, 3).join(', ')}`,
+        source: 'content_opportunity',
+        relatedContent: 'Customer-centric problem-solving content',
+        competitiveInsight: `Emphasizes customer benefits and solutions`,
+        marketPositioning: `Position as customer-centric ${businessIdentity.type} provider`,
+        strategicContext: `Uses ${contentStrategy.contentAngles.slice(0, 2).join(', ')} and ${brandVoice.primaryTone} tone`
+      },
+      {
+        topic: `Strategic Positioning: ${businessIdentity.type} Market Analysis`,
+        reasoning: `Comprehensive market positioning and strategic analysis for ${targetAudience} in ${businessIdentity.location || 'your service area'}`,
+        source: 'strategic_positioning',
+        relatedContent: 'Market analysis and positioning content',
+        competitiveInsight: `Leverages ${businessIdentity.uniqueValueProps.slice(0, 2).join(', ')} for trust`,
+        marketPositioning: `Establish authority in ${businessIdentity.type} market`,
+        strategicContext: `Integrates all strategic requirements and business context`
+      }
+    ];
+
+    // Add culturally-aware topics if location and cultural context available
+    if (location && culturalContext.culturalNuances.length > 0) {
+      strategicTopics.push({
+        topic: `Local ${businessIdentity.type} Solutions in ${location}`,
+        reasoning: `Address local customer needs in ${location} with culturally appropriate communication`,
+        source: 'content_opportunity',
+        relatedContent: 'Local-focused customer problem-solving',
+        competitiveInsight: `Leverages local knowledge and cultural context`,
+        marketPositioning: `Establish strong local presence in ${location}`,
+        strategicContext: `Incorporates ${culturalContext.culturalNuances.slice(0, 3).join(', ')}`
+      });
+    }
+
+    return strategicTopics.slice(0, 12);
   }
 
   private parseTopicsWithReasoning(content: string): Array<{
@@ -656,19 +1004,247 @@ Generate 10-15 SEO topics with reasoning now. Start with "1."`;
     return genericPatterns.some(pattern => pattern.test(reasoning.toLowerCase()));
   }
 
-  private extractTopicsWithRegex(content: string): string[] {
-    const topics: string[] = [];
+  /**
+   * Detects generic topic titles that should be enhanced
+   */
+  private isGenericTopicTitle(topicText: string): boolean {
+    const genericPatterns = [
+      /this topic addresses specific challenges/i,
+      /this topic highlights the importance/i,
+      /this topic provides solutions/i,
+      /comprehensive guide to/i,
+      /complete guide to/i,
+      /ultimate guide to/i,
+      /essential aspects of/i,
+      /valuable insights and/i,
+      /practical advice that/i,
+      /actionable advice that/i,
+      /benefits of/i,
+      /important for/i,
+      /crucial for/i,
+      /how to improve/i,
+      /strategies for success/i,
+      /best practices for/i,
+      /tips and tricks/i,
+      /everything you need to know/i,
+      /the definitive guide/i,
+      /mastering the art of/i,
+      /unlocking the potential/i,
+      /maximizing your/i,
+      /optimizing your/i,
+      /enhancing your/i
+    ];
+
+    const genericStartPatterns = [
+      /^how to /i,
+      /^what is /i,
+      /^why /i,
+      /^when to /i,
+      /^where to /i,
+      /^the importance of /i,
+      /^understanding /i,
+      /^exploring /i,
+      /^discover /i,
+      /^learn /i,
+      /^master /i
+    ];
+
+    const topicLower = topicText.toLowerCase().trim();
+
+    // Check for generic patterns
+    const hasGenericPattern = genericPatterns.some(pattern => pattern.test(topicLower));
+    const hasGenericStart = genericStartPatterns.some(pattern => pattern.test(topicLower));
+
+    // Check if it's too short or doesn't contain meaningful content
+    const isTooShort = topicText.length < 15;
+    const lacksSubstance = !topicText.includes('for') && !topicText.includes('with') && !topicText.includes('in') && topicText.length < 25;
+
+    // Check if it reads like a generic template
+    const soundsLikeTemplate = topicLower.includes('[your business]') ||
+                              topicLower.includes('[industry]') ||
+                              topicLower.includes('[topic]') ||
+                              topicLower.includes('fill in the blank');
+
+    return hasGenericPattern || hasGenericStart || isTooShort || lacksSubstance || soundsLikeTemplate;
+  }
+
+  /**
+   * Enhanced topic title cleaning with generic detection
+   */
+  private cleanTopicTitleEnhanced(topicText: string, businessType: string, targetAudience: string, location?: string): string {
+    let cleanedTopic = topicText.trim();
+
+    // Apply existing cleaning first
+    cleanedTopic = cleanTopicTitle(cleanedTopic);
+
+    // Remove all source identifiers and reasoning fragments aggressively
+    const sourcePatterns = [
+      /\(Source:\s*[^)]+\)/gi,
+      /\b(source:\s*\w+)\b/gi,
+      /\b(competitor_advantage|website_gap|content_opportunity|strategic_positioning|market_opportunity|competitive_gap)\b/gi,
+      /^\s*\w+_(advantage|gap|opportunity|positioning)\s*$/gi,
+      /\s*\d+\.\s*$/gi,
+      /\s*\d+\s*$/,
+      /\|\s*[^|]*$/  // Remove anything after a pipe
+    ];
+
+    // Apply all cleaning patterns
+    for (const pattern of sourcePatterns) {
+      cleanedTopic = cleanedTopic.replace(pattern, '').trim();
+    }
+
+    // If the topic is generic after cleaning, enhance it
+    if (this.isGenericTopicTitle(cleanedTopic)) {
+      cleanedTopic = this.enhanceGenericTopic(cleanedTopic, businessType, targetAudience, location);
+    }
+
+    // Ensure it ends properly
+    if (
+      cleanedTopic.length > 0 &&
+      !cleanedTopic.endsWith('.') &&
+      !cleanedTopic.endsWith('?') &&
+      !cleanedTopic.endsWith('!')
+    ) {
+      cleanedTopic += '.';
+    }
+
+    return cleanedTopic;
+  }
+
+  /**
+   * Enhances generic topic titles to make them more specific and valuable
+   */
+  private enhanceGenericTopic(genericTopic: string, businessType: string, targetAudience: string, location?: string): string {
+    const locationText = location ? ` in ${location}` : '';
+    const topicLower = genericTopic.toLowerCase();
+
+    // Enhancement patterns for common generic topics
+    const enhancements: Array<{pattern: RegExp, replacement: string}> = [
+      // Generic "How to" topics
+      {
+        pattern: /^how to\s+(.+)$/i,
+        replacement: `Complete Guide to $1 for ${targetAudience}${locationText}: Step-by-Step Instructions`
+      },
+
+      // Generic "What is" topics
+      {
+        pattern: /^what is\s+(.+)$/i,
+        replacement: `Understanding $1: Essential Guide for ${targetAudience} in the ${businessType} Industry${locationText}`
+      },
+
+      // Generic "Tips" topics
+      {
+        pattern: /(.+?)\s+tips\s+for\s+(.+)$/i,
+        replacement: `$1 Strategies That Actually Work for $2${locationText}: Proven Methods and Best Practices`
+      },
+
+      // Generic "Guide" topics
+      {
+        pattern: /^(.+?)\s+guide\s+for\s+(.+)$/i,
+        replacement: `Comprehensive $1 Guide for $2${locationText}: Expert Advice and Practical Implementation`
+      },
+
+      // Generic "Best practices" topics
+      {
+        pattern: /^(.+?)\s+best\s+practices$/i,
+        replacement: `$1 Best Practices for ${targetAudience}${locationText}: Industry Standards and Expert Recommendations`
+      },
+
+      // Generic "Strategies" topics
+      {
+        pattern: /^(.+?)\s+strategies\s+for\s+(.+)$/i,
+        replacement: `Advanced $1 Strategies for $2${locationText}: Proven Techniques for Success`
+      },
+
+      // Generic "Benefits" topics
+      {
+        pattern: /^benefits\s+of\s+(.+)$/i,
+        replacement: `The Complete Guide to $1 Benefits for ${targetAudience}${locationText}: Maximizing Your ROI`
+      },
+
+      // Generic "Importance" topics
+      {
+        pattern: /^the\s+importance\s+of\s+(.+)$/i,
+        replacement: `Why $1 Matters for ${targetAudience}${locationText}: Critical Insights and Business Impact`
+      },
+
+      // Generic "Understanding" topics
+      {
+        pattern: /^understanding\s+(.+)$/i,
+        replacement: `Deep Dive into $1: Essential Knowledge for ${targetAudience}${locationText}`
+      }
+    ];
+
+    // Try to apply enhancements
+    for (const {pattern, replacement} of enhancements) {
+      if (pattern.test(genericTopic)) {
+        return genericTopic.replace(pattern, replacement);
+      }
+    }
+
+    // If no pattern matches, create a more specific version
+    if (topicLower.includes('how') || topicLower.includes('guide')) {
+      return `Complete Guide to ${genericTopic.replace(/^(how to|the |a |an )/i, '').trim()} for ${targetAudience}${locationText}: Expert Advice and Step-by-Step Instructions`;
+    }
+
+    if (topicLower.includes('what') || topicLower.includes('understanding')) {
+      return `Understanding ${genericTopic.replace(/^(what is|the |a |an )/i, '').trim()}: Essential Guide for ${targetAudience} in ${businessType}${locationText}`;
+    }
+
+    // Fallback: make it more specific
+    return `${genericTopic} for ${targetAudience}: Expert ${businessType} Insights and Practical Solutions${locationText}`;
+  }
+
+  private extractTopicsWithRegex(
+    content: string,
+    businessType: string,
+    targetAudience: string,
+    location?: string
+  ): string[] {
+    const topics = new Set<string>();
+
+    const addTopic = (rawTopic: string) => {
+      if (!rawTopic) return;
+
+      // Remove leftover metadata fragments before cleaning
+      let cleaned = rawTopic
+        .replace(/^[\s|:,-]+/, '')
+        .replace(/\s*\|\s*[^|]*$/, '')
+        .trim();
+
+      cleaned = this.cleanTopicTitleEnhanced(cleaned, businessType, targetAudience, location);
+
+      // Remove entries the cleaner could not salvage
+      if (!cleaned || cleaned.length < 10) {
+        return;
+      }
+
+      const lower = cleaned.toLowerCase();
+      if (
+        cleaned.startsWith('|') ||
+        lower.startsWith('this topic') ||
+        lower.startsWith('topic ') ||
+        lower.startsWith('reasoning')
+      ) {
+        return;
+      }
+
+      const normalized = cleaned.replace(/\s+/g, ' ').trim();
+
+      if (!normalized || normalized.length < 10) {
+        return;
+      }
+
+      topics.add(normalized);
+    };
 
     // Try to match numbered list patterns
     const numberedMatches = content.match(/\d+\.\s+([^.!?]*[.!?]?)/g);
     if (numberedMatches) {
       for (const match of numberedMatches) {
         const topic = match.replace(/^\d+\.\s*/, '').trim();
-        if (topic.length > 5 && topic.length < 200 &&
-            !topic.toLowerCase().includes('generated') &&
-            !topic.toLowerCase().includes('based on')) {
-          topics.push(topic);
-        }
+        if (!topic) continue;
+        addTopic(topic);
       }
     }
 
@@ -677,31 +1253,106 @@ Generate 10-15 SEO topics with reasoning now. Start with "1."`;
     if (bulletMatches) {
       for (const match of bulletMatches) {
         const topic = match.replace(/^[-*+]\s*/, '').trim();
-        if (topic.length > 5 && topic.length < 200 && !topics.includes(topic)) {
-          topics.push(topic);
-        }
+        if (!topic) continue;
+        addTopic(topic);
       }
     }
 
-    return topics;
+    return Array.from(topics);
   }
 
   private generateFallbackTopics(topic: string, businessType: string, targetAudience: string, location?: string): string[] {
     const locationText = location ? ` in ${location}` : '';
+    const locationModifier = location ? `${location} ` : '';
+
+    // Generate more specific, business-relevant topics based on business type
+    const businessSpecificTopics = this.generateBusinessSpecificTopics(topic, businessType, targetAudience, location);
+
+    // General fallback topics with business context
     const baseTopics = [
-      `How to ${topic.toLowerCase()} for ${targetAudience}${locationText}`,
-      `${businessType} Guide to ${topic} for ${targetAudience}`,
-      `Top ${topic} Strategies for ${targetAudience} ${businessType}s`,
-      `${topic} Best Practices for ${targetAudience}`,
-      `Complete ${topic} Guide for ${businessType} Owners`,
-      `${targetAudience} ${topic} Solutions That Work`,
-      `Affordable ${topic} Options for ${targetAudience}`,
-      `${topic} Mistakes to Avoid for ${businessType}s`,
-      `Professional ${topic} Services for ${targetAudience}`,
-      `${topic} Trends Every ${targetAudience} Should Know`,
+      `How to Choose the Right ${businessType} for ${topic.toLowerCase()}${locationText}`,
+      `Complete Guide to ${topic} for ${targetAudience} from Trusted ${businessType}s`,
+      `${topic} Solutions That Actually Work for ${targetAudience}${locationText}`,
+      `What Every ${targetAudience} Should Know About ${topic} Before Hiring`,
+      `Emergency ${topic} Services: 24/7 Solutions for ${targetAudience}${locationText}`,
+      `${topic} Cost Guide: What ${targetAudience} Should Expect to Pay${locationText}`,
+      `Top ${topic} Mistakes ${targetAudience} Make (And How to Avoid Them)`,
+      `${businessType} vs DIY ${topic}: When to Call a Professional${locationText}`,
+      `${topic} for ${targetAudience}: Questions to Ask Before Hiring`,
+      `${topic} Trends in ${location || 'Your Area'}: What's New for ${targetAudience}`,
+      ...businessSpecificTopics
     ];
 
-    return baseTopics.slice(0, 10);
+    // Remove duplicates and limit to 10
+    const uniqueTopics = [...new Set(baseTopics)];
+    return uniqueTopics.slice(0, 10);
+  }
+
+  private generateBusinessSpecificTopics(topic: string, businessType: string, targetAudience: string, location?: string): string[] {
+    const locationText = location ? ` in ${location}` : '';
+
+    // Business type specific topic templates
+    const businessTemplates: Record<string, string[]> = {
+      'plumbing': [
+        `Common ${topic.toLowerCase()} Issues Every Homeowner Faces${locationText}`,
+        `${topic} Warning Signs: When to Call an Emergency Plumber`,
+        `How Professional Plumbers Handle Complex ${topic.toLowerCase()} Problems`,
+        `${topic} Maintenance Tips to Prevent Costly Repairs`,
+      ],
+      'hvac': [
+        `${topic} Solutions for Year-Round Comfort${locationText}`,
+        `HVAC ${topic.toLowerCase()}: Energy Efficiency Tips for ${targetAudience}`,
+        `When to Replace vs Repair: ${topic} Decisions for Homeowners`,
+        `Professional ${topic} Services: What HVAC Technicians Recommend`,
+      ],
+      'electrical': [
+        `Electrical ${topic.toLowerCase()}: Safety First for ${targetAudience}`,
+        `${topic} Upgrades: Modern Solutions for Older Homes${locationText}`,
+        `Licensed Electricians Discuss Common ${topic.toLowerCase()} Problems`,
+        `${topic} Codes and Regulations: What Homeowners Need to Know`,
+      ],
+      'cleaning': [
+        `Professional ${topic.toLowerCase()} Services for Busy ${targetAudience}`,
+        `${topic} Solutions That Fit Your Schedule and Budget${locationText}`,
+        `Eco-Friendly ${topic} Options for Health-Conscious Homes`,
+        `${topic} Frequency Guide: What ${targetAudience} Really Need`,
+      ],
+      'landscaping': [
+        `${topic} Design Ideas for Beautiful Outdoor Spaces${locationText}`,
+        `Sustainable ${topic.toLowerCase()} Practices for Eco-Friendly Homes`,
+        `Seasonal ${topic} Maintenance for ${targetAudience}${locationText}`,
+        `Professional ${topic} vs DIY: Cost-Benefit Analysis`,
+      ],
+      'roofing': [
+        `${topic} Solutions for All Weather Conditions${locationText}`,
+        `Roof ${topic.toLowerCase()}: Warning Signs Every Homeowner Should Know`,
+        `Professional Roof ${topic} vs DIY: Making the Right Choice`,
+        `${topic} Materials Guide: Options for ${targetAudience}${locationText}`,
+      ],
+      'painting': [
+        `${topic} Color Trends for Modern Homes${locationText}`,
+        `Professional ${topic} Techniques for Flawless Results`,
+        `${topic} Preparation: What ${targetAudience} Need to Know`,
+        `Interior vs Exterior ${topic}: Different Approaches for Best Results`,
+      ],
+      'pest-control': [
+        `${topic} Prevention Strategies for ${targetAudience}${locationText}`,
+        `Safe ${topic.toLowerCase()} Solutions for Families and Pets`,
+        `Seasonal ${topic}: What to Expect and How to Prepare`,
+        `Professional ${topic} Treatment: What to Expect and When`,
+      ]
+    };
+
+    // Get business-specific topics or use general templates
+    const businessKey = businessType.toLowerCase();
+    const specificTopics = businessTemplates[businessKey] || [
+      `${topic} Solutions for ${targetAudience}${locationText}`,
+      `Professional ${topic.toLowerCase()} Services from ${businessType}s`,
+      `${topic} Considerations Every ${targetAudience} Should Know`,
+      `${businessType} Guide to ${topic} Success${locationText}`,
+    ];
+
+    return specificTopics;
   }
 
   private generateSpecificReasoning(
@@ -970,7 +1621,7 @@ Generate 10-15 SEO topics with reasoning now. Start with "1."`;
   async analyzeTopicMetadata(topicsWithReasoning: Array<{
     topic: string;
     reasoning: string;
-    source: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity' | 'market_opportunity' | 'competitive_gap';
+    source: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity' | 'market_opportunity' | 'competitive_gap' | 'strategic_positioning';
     relatedContent?: string;
     competitiveInsight?: string;
     marketPositioning?: string;
@@ -981,7 +1632,7 @@ Generate 10-15 SEO topics with reasoning now. Start with "1."`;
     competition: 'low' | 'medium' | 'high';
     suggestedTags: string[];
     reasoning: string;
-    source: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity' | 'market_opportunity' | 'competitive_gap';
+    source: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity' | 'market_opportunity' | 'competitive_gap' | 'strategic_positioning';
     relatedContent?: string;
     competitiveInsight?: string;
     marketPositioning?: string;
@@ -1064,7 +1715,7 @@ For searchVolume, use the midpoint of ranges:
   private parseMarkdownAnalysisWithReasoning(content: string, topicsWithReasoning: Array<{
     topic: string;
     reasoning: string;
-    source: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity' | 'market_opportunity' | 'competitive_gap';
+    source: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity' | 'market_opportunity' | 'competitive_gap' | 'strategic_positioning';
     relatedContent?: string;
     competitiveInsight?: string;
     marketPositioning?: string;
@@ -1075,7 +1726,7 @@ For searchVolume, use the midpoint of ranges:
     competition: 'low' | 'medium' | 'high';
     suggestedTags: string[];
     reasoning: string;
-    source: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity' | 'market_opportunity' | 'competitive_gap';
+    source: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity' | 'market_opportunity' | 'competitive_gap' | 'strategic_positioning';
     relatedContent?: string;
     competitiveInsight?: string;
     marketPositioning?: string;
@@ -1213,6 +1864,13 @@ Example format:
       // Try to parse JSON response
       try {
         const jsonContent = extractCleanJson(content);
+
+        // If no valid JSON found, create a fallback response
+        if (!jsonContent) {
+          console.warn('⚠️ [LEMONFOX] No valid JSON found in AI response, using fallback');
+          return this.createFallbackDetailedTopicInfo(topic, businessType, targetAudience, location);
+        }
+
         const parsed = JSON.parse(jsonContent);
 
         // Validate and enhance the response with business-specific content
@@ -1234,7 +1892,11 @@ Example format:
         };
       } catch (parseError) {
         console.error('Failed to parse detailed topic info response:', parseError);
-        throw new Error('Failed to parse AI response');
+        console.error('Raw AI response content:', content);
+
+        // Return fallback response instead of throwing error
+        console.warn('⚠️ [LEMONFOX] Using fallback response due to JSON parsing failure');
+        return this.createFallbackDetailedTopicInfo(topic, businessType, targetAudience, location);
       }
     } catch (error) {
       console.error('Error generating detailed topic info:', error);
@@ -1713,6 +2375,47 @@ Start your response with "1."`;
     }
 
     return 'what_is'; // Default fallback
+  }
+
+  /**
+   * Creates a fallback detailed topic info response when JSON parsing fails
+   */
+  private createFallbackDetailedTopicInfo(
+    topic: string,
+    businessType: string,
+    targetAudience: string,
+    location?: string
+  ): {
+    description: string;
+    contentBrief: string;
+    contentAngle: string;
+    estimatedTimeToWrite: string;
+    competitorAnalysis: string;
+    keywordInsights: string[];
+    relatedTopics: string[];
+  } {
+    const locationText = location ? ` in ${location}` : '';
+
+    return {
+      description: `A strategic guide to ${topic} that helps ${businessType} businesses achieve measurable results by addressing specific challenges faced by ${targetAudience}. This comprehensive approach combines industry best practices with practical implementation strategies${locationText}.`,
+      contentBrief: `This comprehensive topic covers: 1) Key challenges and opportunities in ${topic} for ${businessType} businesses, 2) Step-by-step implementation strategies tailored for ${targetAudience}, 3) Measurable metrics and KPIs to track success, 4) Common pitfalls and how to avoid them, 5) Industry-specific examples and case studies, 6) Tools and resources for efficient execution, 7) Long-term maintenance and optimization strategies.`,
+      contentAngle: `Focus on a data-driven approach that combines ${businessType} industry expertise with practical ${targetAudience} insights, highlighting measurable ROI and competitive advantages that generic content often overlooks.`,
+      estimatedTimeToWrite: '3-4 hours',
+      competitorAnalysis: `Most competitors provide generic ${topic} advice that lacks industry specificity. This topic stands out by focusing on ${businessType}-specific challenges, providing actionable strategies with measurable outcomes that address real business needs rather than theoretical concepts.`,
+      keywordInsights: [
+        `Primary: "${topic} for ${businessType}${locationText}" - high commercial intent targeting decision-makers`,
+        `Secondary: "how to ${topic.toLowerCase()} ${targetAudience}" - informational intent addressing specific pain points`,
+        `Long-tail: "${topic} strategies that improve [business outcome]" - problem-solving with measurable results`,
+        location ? `Local: "${topic} near ${location} for ${businessType}" - geo-targeted commercial intent` : `Industry: "${businessType} ${topic} best practices" - industry-specific authority building`
+      ],
+      relatedTopics: [
+        `Advanced ${topic} strategies for ${businessType} growth`,
+        `Measuring ROI from ${topic} initiatives for ${targetAudience}`,
+        `${topic} automation and scaling techniques for ${businessType}`,
+        `Common ${topic} mistakes that cost ${businessType} businesses money`,
+        `Future trends in ${topic} for ${targetAudience} success`
+      ]
+    };
   }
 }
 

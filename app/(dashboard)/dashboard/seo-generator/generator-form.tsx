@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { LocationAutocomplete } from '@/components/ui/location-autocomplete';
-import { Loader2, Wand2, Sparkles, Settings, ChevronDown, TrendingUp, Globe, MessageCircle, Building, Target, Info, RefreshCw, Clock, CheckCircle, Languages, Users, MapPin } from 'lucide-react';
+import { Loader2, Wand2, Sparkles, Settings, ChevronDown, TrendingUp, Globe, MessageCircle, Building, Target, Info, Languages, Users, MapPin, Plus, X, BookOpen, Heart, Coffee, Smile } from 'lucide-react';
 import { INDUSTRY_TEMPLATES } from '@/lib/seo/industry-templates';
 import { IndustryIcon, getIndustryIcon } from '@/components/ui/industry-icons';
 
@@ -23,7 +23,7 @@ const TopicGenerationSchema = z.object({
   industryId: z.string().min(1, 'Please select your industry'),
   targetAudience: z.string().min(2, 'Target audience is required'),
   location: z.string().optional(),
-  competitorUrl: z.string().url('Invalid competitor URL').optional().or(z.literal('')),
+  competitorUrls: z.array(z.string().url('Invalid competitor URL').or(z.literal(''))).optional(),
   // Enhanced personalization fields
   tone: z.string().min(1, 'Please select a tone').default('professional'),
   additionalContext: z.string().optional(),
@@ -36,7 +36,7 @@ const TopicGenerationSchema = z.object({
 type TopicGenerationForm = z.infer<typeof TopicGenerationSchema>;
 
 interface GeneratorFormProps {
-  onSubmit: (data: TopicGenerationForm & { websiteUrl: string; forceRecrawl?: boolean; detailedLocation?: DetailedLocation }) => Promise<void>;
+  onSubmit: (data: TopicGenerationForm & { detailedLocation?: DetailedLocation }) => Promise<void>;
   isGenerating: boolean;
   usageStats?: {
     daily: { remaining: number; limit: number };
@@ -57,6 +57,29 @@ const targetAudienceSuggestions = [
   'Health-conscious individuals',
 ];
 
+const businessTypeSuggestions = [
+  { value: 'plumbing service', label: 'Plumbing Service' },
+  { value: 'electrical contractor', label: 'Electrical Contractor' },
+  { value: 'cleaning service', label: 'Cleaning Service' },
+  { value: 'handyman service', label: 'Handyman Service' },
+  { value: 'landscaping', label: 'Landscaping' },
+  { value: 'roofing contractor', label: 'Roofing Contractor' },
+  { value: 'hvac company', label: 'HVAC Company' },
+  { value: 'painting service', label: 'Painting Service' },
+  { value: 'moving company', label: 'Moving Company' },
+  { value: 'pest control', label: 'Pest Control' },
+  { value: 'home inspection', label: 'Home Inspection' },
+  { value: 'general contractor', label: 'General Contractor' },
+  { value: 'digital marketing agency', label: 'Digital Marketing Agency' },
+  { value: 'restaurant', label: 'Restaurant' },
+  { value: 'retail store', label: 'Retail Store' },
+  { value: 'fitness center', label: 'Fitness Center' },
+  { value: 'consulting firm', label: 'Consulting Firm' },
+  { value: 'real estate agency', label: 'Real Estate Agency' },
+  { value: 'auto repair shop', label: 'Auto Repair Shop' },
+  { value: 'beauty salon', label: 'Beauty Salon' },
+];
+
 
 const toneOptions = [
   {
@@ -65,23 +88,26 @@ const toneOptions = [
     description: 'Formal, expert tone with industry terminology',
     example: 'Our comprehensive analysis reveals key insights into...',
     icon: Building,
-    color: 'bg-blue-100 text-blue-800 border-blue-200'
+    color: 'bg-blue-50 border-blue-200 text-blue-900',
+    selectedColor: 'bg-blue-100 border-blue-400 text-blue-900'
   },
   {
     value: 'casual',
     label: 'Casual',
     description: 'Relaxed, conversational tone that feels approachable',
     example: "Let's talk about what's working and what isn't...",
-    icon: MessageCircle,
-    color: 'bg-green-100 text-green-800 border-green-200'
+    icon: Coffee,
+    color: 'bg-green-50 border-green-200 text-green-900',
+    selectedColor: 'bg-green-100 border-green-400 text-green-900'
   },
   {
     value: 'friendly',
     label: 'Friendly',
     description: 'Warm, welcoming tone that builds trust',
     example: "We're here to help you every step of the way...",
-    icon: Sparkles,
-    color: 'bg-purple-100 text-purple-800 border-purple-200'
+    icon: Heart,
+    color: 'bg-purple-50 border-purple-200 text-purple-900',
+    selectedColor: 'bg-purple-100 border-purple-400 text-purple-900'
   },
   {
     value: 'authoritative',
@@ -89,7 +115,8 @@ const toneOptions = [
     description: 'Confident, expert tone that establishes credibility',
     example: 'Based on extensive research and industry expertise...',
     icon: Target,
-    color: 'bg-red-100 text-red-800 border-red-200'
+    color: 'bg-red-50 border-red-200 text-red-900',
+    selectedColor: 'bg-red-100 border-red-400 text-red-900'
   },
   {
     value: 'conversational',
@@ -97,15 +124,17 @@ const toneOptions = [
     description: 'Engaging, two-way tone that encourages interaction',
     example: "Have you ever wondered how to...? Let's dive in...",
     icon: MessageCircle,
-    color: 'bg-yellow-100 text-yellow-800 border-yellow-200'
+    color: 'bg-yellow-50 border-yellow-200 text-yellow-900',
+    selectedColor: 'bg-yellow-100 border-yellow-400 text-yellow-900'
   },
   {
     value: 'humorous',
     label: 'Humorous',
     description: 'Light-hearted tone with appropriate humor',
     example: 'Let\'s face it - tackling this can feel like herding cats...',
-    icon: Sparkles,
-    color: 'bg-orange-100 text-orange-800 border-orange-200'
+    icon: Smile,
+    color: 'bg-orange-50 border-orange-200 text-orange-900',
+    selectedColor: 'bg-orange-100 border-orange-400 text-orange-900'
   },
   {
     value: 'inspirational',
@@ -113,7 +142,8 @@ const toneOptions = [
     description: 'Motivating tone that encourages action',
     example: 'Transform your business with these powerful strategies...',
     icon: Sparkles,
-    color: 'bg-indigo-100 text-indigo-800 border-indigo-200'
+    color: 'bg-indigo-50 border-indigo-200 text-indigo-900',
+    selectedColor: 'bg-indigo-100 border-indigo-400 text-indigo-900'
   }
 ];
 
@@ -124,23 +154,29 @@ const languagePreferenceOptions = [
     description: 'Professional English with cultural awareness',
     example: 'Generate content in standard English while respecting local cultural context',
     icon: Globe,
-    color: 'bg-blue-50 text-blue-700 border-blue-200'
+    color: 'bg-blue-50 border-blue-200 text-blue-900',
+    selectedColor: 'bg-blue-100 border-blue-400 text-blue-900',
+    regionalExample: 'Professional service delivery with local cultural sensitivity'
   },
   {
     value: 'cultural_english',
     label: 'Cultural English',
     description: 'English with local slang and expressions',
-    example: 'Mix English with Nigerian Pidgin, Indian English, or other local expressions',
+    example: 'Mix English with Australian slang, Nigerian Pidgin, or other local expressions',
     icon: MessageCircle,
-    color: 'bg-green-50 text-green-700 border-green-200'
+    color: 'bg-green-50 border-green-200 text-green-900',
+    selectedColor: 'bg-green-100 border-green-400 text-green-900',
+    regionalExample: 'No worries mate, we provide fair dinkum quality service (Australia)'
   },
   {
     value: 'native',
     label: 'Native Language',
     description: 'Content in the local language of your region',
     example: 'Generate content in Hindi, Spanish, or other local languages',
-    icon: Sparkles,
-    color: 'bg-purple-50 text-purple-700 border-purple-200'
+    icon: Languages,
+    color: 'bg-purple-50 border-purple-200 text-purple-900',
+    selectedColor: 'bg-purple-100 border-purple-400 text-purple-900',
+    regionalExample: 'हम आपकी सेवा में तैयार हैं (Hindi: We are at your service)'
   }
 ];
 
@@ -151,7 +187,8 @@ const formalityLevelOptions = [
     description: 'Professional, respectful language for business contexts',
     example: 'We hereby present our comprehensive analysis for your consideration.',
     icon: Building,
-    color: 'bg-blue-100 text-blue-800 border-blue-200'
+    color: 'bg-blue-50 border-blue-200 text-blue-900',
+    selectedColor: 'bg-blue-100 border-blue-400 text-blue-900'
   },
   {
     value: 'professional',
@@ -159,7 +196,8 @@ const formalityLevelOptions = [
     description: 'Business-appropriate language that\'s approachable',
     example: 'Let\'s explore how our services can benefit your business goals.',
     icon: Target,
-    color: 'bg-green-100 text-green-800 border-green-200'
+    color: 'bg-green-50 border-green-200 text-green-900',
+    selectedColor: 'bg-green-100 border-green-400 text-green-900'
   },
   {
     value: 'casual',
@@ -167,7 +205,8 @@ const formalityLevelOptions = [
     description: 'Relaxed, friendly tone for building rapport',
     example: 'Hey there! We\'ve got some great ideas that might work for you.',
     icon: MessageCircle,
-    color: 'bg-yellow-100 text-yellow-800 border-yellow-200'
+    color: 'bg-yellow-50 border-yellow-200 text-yellow-900',
+    selectedColor: 'bg-yellow-100 border-yellow-400 text-yellow-900'
   },
   {
     value: 'slang_heavy',
@@ -175,7 +214,8 @@ const formalityLevelOptions = [
     description: 'Authentic local expressions and casual language',
     example: 'Abeg, check out these wicked ideas for your business!',
     icon: Sparkles,
-    color: 'bg-orange-100 text-orange-800 border-orange-200'
+    color: 'bg-orange-50 border-orange-200 text-orange-900',
+    selectedColor: 'bg-orange-100 border-orange-400 text-orange-900'
   }
 ];
 
@@ -186,15 +226,17 @@ const contentPurposeOptions = [
     description: 'Persuasive content to attract and convert customers',
     example: 'Promotional content that highlights benefits and drives action',
     icon: TrendingUp,
-    color: 'bg-red-50 text-red-700 border-red-200'
+    color: 'bg-red-50 border-red-200 text-red-900',
+    selectedColor: 'bg-red-100 border-red-400 text-red-900'
   },
   {
     value: 'educational',
     label: 'Educational',
     description: 'Informative content that teaches and explains',
     example: 'Helpful content that answers questions and provides value',
-    icon: Sparkles,
-    color: 'bg-blue-50 text-blue-700 border-blue-200'
+    icon: BookOpen,
+    color: 'bg-blue-50 border-blue-200 text-blue-900',
+    selectedColor: 'bg-blue-100 border-blue-400 text-blue-900'
   },
   {
     value: 'conversational',
@@ -202,7 +244,8 @@ const contentPurposeOptions = [
     description: 'Engaging content that encourages interaction',
     example: 'Interactive content that feels like a conversation',
     icon: MessageCircle,
-    color: 'bg-green-50 text-green-700 border-green-200'
+    color: 'bg-green-50 border-green-200 text-green-900',
+    selectedColor: 'bg-green-100 border-green-400 text-green-900'
   },
   {
     value: 'technical',
@@ -210,27 +253,49 @@ const contentPurposeOptions = [
     description: 'Detailed content for expert audiences',
     example: 'In-depth content with technical details and specifications',
     icon: Settings,
-    color: 'bg-purple-50 text-purple-700 border-purple-200'
+    color: 'bg-purple-50 border-purple-200 text-purple-900',
+    selectedColor: 'bg-purple-100 border-purple-400 text-purple-900'
   }
 ];
+
+// Helper function to generate regional content preview
+function getRegionalContentPreview(languagePreference: string, formalityLevel: string, location?: string): string {
+  if (!location) {
+    return 'Content will be generated in standard professional English with cultural awareness based on your preferences.';
+  }
+
+  const locationLower = location.toLowerCase();
+
+  // Dynamic regional examples based on cultural settings
+  if (languagePreference === 'cultural_english') {
+    if (formalityLevel === 'casual') {
+      return `Content will blend English with authentic ${location} cultural expressions and local communication style that resonates with your target audience.`;
+    }
+    return `Content will be written in professional English that incorporates ${location} cultural context and local business practices.`;
+  }
+
+  if (languagePreference === 'native') {
+    return `Content will be generated in the local native language of ${location} with authentic cultural expressions and regional business terminology.`;
+  }
+
+  if (formalityLevel === 'slang_heavy') {
+    return `Content will use authentic local slang and casual expressions from ${location} to sound like a native local speaker and build immediate trust.`;
+  }
+
+  if (formalityLevel === 'formal') {
+    return `Content will use formal business language appropriate for ${location} business culture with professional terminology and respectful communication style.`;
+  }
+
+  return `Professional service delivery tailored to ${location} with local cultural awareness and appropriate business etiquette.`;
+}
 
 export function GeneratorForm({ onSubmit, isGenerating, usageStats }: GeneratorFormProps) {
   const [showSuggestions, setShowSuggestions] = useState({
     targetAudience: false,
   });
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
-  const [isCrawling, setIsCrawling] = useState(false);
-  const [websiteAnalysis, setWebsiteAnalysis] = useState<any>(null);
-  const [primaryWebsiteUrl, setPrimaryWebsiteUrl] = useState('');
-  const [isLoadingWebsite, setIsLoadingWebsite] = useState(true);
-  const [websiteCacheStatus, setWebsiteCacheStatus] = useState<{
-    recentlyCrawled: boolean;
-    lastCrawledAt: string | null;
-    daysSinceCrawl: number | null;
-  } | null>(null);
-  const [isCheckingCache, setIsCheckingCache] = useState(false);
-  const [forceRecrawl, setForceRecrawl] = useState(false);
   const [detailedLocation, setDetailedLocation] = useState<DetailedLocation | null>(null);
+  const [competitorUrls, setCompetitorUrls] = useState<string[]>(['']);
 
   const {
     register,
@@ -242,88 +307,58 @@ export function GeneratorForm({ onSubmit, isGenerating, usageStats }: GeneratorF
     resolver: zodResolver(TopicGenerationSchema),
     mode: 'onChange',
     defaultValues: {
-      tone: 'professional'
+      tone: 'professional',
+      competitorUrls: ['']
     }
   });
 
   const watchedFields = watch();
 
-  // Fetch primary website URL on component mount
-  useEffect(() => {
-    fetchPrimaryWebsiteUrl();
-  }, []);
-
-  // Check cache status when primary website URL is available
-  useEffect(() => {
-    if (primaryWebsiteUrl) {
-      checkWebsiteCacheStatus();
-    }
-  }, [primaryWebsiteUrl]);
-
-  const fetchPrimaryWebsiteUrl = async () => {
-    try {
-      const response = await fetch('/api/user/website');
-      if (response.ok) {
-        const data = await response.json();
-        const url = data.data?.primaryWebsiteUrl || '';
-        setPrimaryWebsiteUrl(url);
-      }
-    } catch (error) {
-      console.error('Error fetching primary website URL:', error);
-    } finally {
-      setIsLoadingWebsite(false);
-    }
-  };
-
-  const checkWebsiteCacheStatus = async () => {
-    if (!primaryWebsiteUrl) return;
-
-    setIsCheckingCache(true);
-    try {
-      const response = await fetch('/api/seo/crawl/cache-status', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          url: primaryWebsiteUrl,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setWebsiteCacheStatus(data.data);
-      } else {
-        console.error('Failed to check cache status:', await response.text());
-      }
-    } catch (error) {
-      console.error('Error checking cache status:', error);
-    } finally {
-      setIsCheckingCache(false);
-    }
-  };
-
+  
   const handleSuggestionClick = (field: keyof TopicGenerationForm, value: string) => {
     setValue(field, value);
     setShowSuggestions(prev => ({ ...prev, [field]: false }));
   };
 
   const handleFormSubmit = async (data: TopicGenerationForm) => {
-    // Include the primary website URL, force recrawl flag, and detailed location data in the submission
+    // Filter out empty competitor URLs
+    const validCompetitorUrls = data.competitorUrls?.filter(url => url && url.trim() !== '') || [];
+
+    // Include detailed location data and ALL form settings in the submission
     await onSubmit({
       ...data,
-      websiteUrl: primaryWebsiteUrl,
-      forceRecrawl: forceRecrawl,
+      competitorUrls: validCompetitorUrls,
       detailedLocation: detailedLocation || undefined
     });
-
-    // Reset force recrawl flag after submission
-    setForceRecrawl(false);
   };
 
-  const handleForceRecrawl = () => {
-    setForceRecrawl(true);
+  
+  const addCompetitorUrl = () => {
+    if (competitorUrls.length >= 5) {
+      return; // Limit to 5 competitor URLs
+    }
+    const newUrls = [...competitorUrls, ''];
+    setCompetitorUrls(newUrls);
+    setValue('competitorUrls', newUrls);
   };
+
+  const removeCompetitorUrl = (index: number) => {
+    const newUrls = competitorUrls.filter((_, i) => i !== index);
+    setCompetitorUrls(newUrls);
+    setValue('competitorUrls', newUrls);
+  };
+
+  const updateCompetitorUrl = (index: number, value: string) => {
+    const newUrls = [...competitorUrls];
+    newUrls[index] = value;
+    setCompetitorUrls(newUrls);
+    setValue('competitorUrls', newUrls);
+  };
+
+  // Sync competitor URLs with form state
+  useEffect(() => {
+    setValue('competitorUrls', competitorUrls);
+  }, [competitorUrls, setValue]);
 
   const isNearLimit = usageStats?.daily.remaining !== undefined && usageStats.daily.limit > 0
     ? (usageStats.daily.remaining / usageStats.daily.limit) <= 0.2
@@ -444,413 +479,334 @@ export function GeneratorForm({ onSubmit, isGenerating, usageStats }: GeneratorF
 
       <CardContent>
         <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
-          {/* Main Topic Input */}
+            {/* Main Topic */}
           <div className="space-y-2">
-            <Label htmlFor="topic" className="text-base font-medium flex items-center gap-1">
-              What's your main topic or keyword?
-              <span className="text-red-500 text-sm">*</span>
+            <Label htmlFor="topic">
+              Topic <span className="text-red-500">*</span>
             </Label>
-            <div className="relative">
-              <Input
-                id="topic"
-                placeholder="e.g., 'digital marketing for restaurants'"
-                {...register('topic')}
-                className="text-base h-12 sm:h-11 pr-10 touch-manipulation active:scale-[0.99] transition-transform"
-                disabled={isGenerating}
-                autoComplete="off"
-                autoCapitalize="sentences"
-                spellCheck="false"
-              />
-              <Sparkles className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            </div>
+            <Input
+              id="topic"
+              placeholder="e.g., digital marketing for restaurants"
+              {...register('topic')}
+              disabled={isGenerating}
+            />
             {errors.topic && (
               <p className="text-sm text-destructive">{errors.topic.message}</p>
             )}
-            <p className="text-xs text-muted-foreground">
-              Enter the primary topic you want to create content about <span className="text-red-500 font-medium">(required)</span>
-            </p>
           </div>
 
-          {/* Business Type Input */}
+            {/* Business Type */}
           <div className="space-y-2">
-            <Label htmlFor="businessType" className="text-base font-medium flex items-center gap-1">
-              What type of business are you creating content for?
-              <span className="text-red-500 text-sm">*</span>
+            <Label htmlFor="businessType">
+              Business Type <span className="text-red-500">*</span>
             </Label>
-            <Input
-              id="businessType"
-              placeholder="e.g., 'plumbing service', 'digital marketing agency', 'restaurant'"
-              {...register('businessType')}
-              className="text-base h-12 sm:h-11 touch-manipulation active:scale-[0.99] transition-transform"
+            <Select
+              value={watchedFields.businessType || ''}
+              onValueChange={(value) => setValue('businessType', value, { shouldValidate: true })}
               disabled={isGenerating}
-              autoComplete="off"
-              autoCapitalize="words"
-            />
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select business type" />
+              </SelectTrigger>
+              <SelectContent>
+                {businessTypeSuggestions.map((business) => (
+                  <SelectItem key={business.value} value={business.value}>
+                    {business.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {errors.businessType && (
               <p className="text-sm text-destructive">{errors.businessType.message}</p>
             )}
-            <p className="text-xs text-muted-foreground">
-              Describe your business type to generate more relevant content ideas <span className="text-red-500 font-medium">(required)</span>
-            </p>
           </div>
 
-          {/* Industry Selection Grid */}
+          {/* Industry */}
           <div className="space-y-2">
-            <Label htmlFor="industryId" className="text-base font-medium flex items-center gap-1">
-              What type of service business?
-              <span className="text-red-500 text-sm">*</span>
+            <Label htmlFor="industryId">
+              Industry <span className="text-red-500">*</span>
             </Label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              {INDUSTRY_TEMPLATES.map((template) => {
-                const isSelected = watchedFields.industryId === template.id;
-                const industryData = getIndustryIcon(template.id);
-
-                return (
-                  <button
-                    key={template.id}
-                    type="button"
-                    onClick={() => setValue('industryId', template.id)}
-                    className={`p-4 rounded-xl border-2 transition-all touch-manipulation active:scale-[0.96] hover:shadow-lg ${
-                      isSelected
-                        ? 'border-primary bg-primary/5 shadow-sm ring-2 ring-primary/20'
-                        : 'border-border hover:border-primary/50 bg-background hover:bg-gray-50'
-                    }`}
-                    disabled={isGenerating}
-                  >
-                    <div className="flex flex-col items-center gap-3 text-center">
-                      <div className={`${industryData.bgColor} ${industryData.color} w-12 h-12 rounded-xl flex items-center justify-center text-xl font-bold shadow-sm`}>
-                        {industryData.icon}
-                      </div>
-                      <div className="min-w-0">
-                        <div className={`text-xs sm:text-sm font-medium leading-tight ${
-                          isSelected ? 'text-primary' : 'text-gray-700'
-                        }`}>
-                          {template.name}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-1">
-                          {template.category}
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+            <Select
+              value={watchedFields.industryId || ''}
+              onValueChange={(value) => setValue('industryId', value, { shouldValidate: true })}
+              disabled={isGenerating}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select industry" />
+              </SelectTrigger>
+              <SelectContent>
+                {INDUSTRY_TEMPLATES.map((template) => (
+                  <SelectItem key={template.id} value={template.id}>
+                    {template.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {errors.industryId && (
               <p className="text-sm text-destructive">{errors.industryId.message}</p>
             )}
-            <p className="text-xs text-muted-foreground">
-              Select your industry to get specialized content ideas <span className="text-red-500 font-medium">(required)</span>
-            </p>
-
-            {/* Hidden input to store industryId for form validation */}
-            <input type="hidden" {...register('industryId')} />
           </div>
 
-          {/* Target Audience Input */}
+          {/* Target Audience */}
           <div className="space-y-2">
-            <Label htmlFor="targetAudience" className="text-base font-medium flex items-center gap-1">
-              Who are you targeting?
-              <span className="text-red-500 text-sm">*</span>
+            <Label htmlFor="targetAudience">
+              Target Audience <span className="text-red-500">*</span>
             </Label>
-            <div className="relative">
-              <Input
-                id="targetAudience"
-                placeholder="e.g., Local customers, Small businesses, Young professionals *"
-                {...register('targetAudience')}
-                className="text-base h-12 sm:h-11 touch-manipulation active:scale-[0.99] transition-transform"
-                disabled={isGenerating}
-                onFocus={() => setShowSuggestions(prev => ({ ...prev, targetAudience: true }))}
-                onBlur={() => setTimeout(() => setShowSuggestions(prev => ({ ...prev, targetAudience: false })), 200)}
-                autoComplete="off"
-              />
-              {showSuggestions.targetAudience && watchedFields.targetAudience && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-border rounded-md shadow-lg max-h-40 overflow-y-auto">
-                  {targetAudienceSuggestions
-                    .filter(suggestion =>
-                      suggestion.toLowerCase().includes(watchedFields.targetAudience.toLowerCase())
-                    )
-                    .slice(0, 5)
-                    .map((suggestion, index) => (
-                      <button
-                        key={index}
-                        type="button"
-                        className="w-full text-left px-3 py-3 text-sm hover:bg-muted transition-colors touch-manipulation active:scale-[0.98]"
-                        onClick={() => handleSuggestionClick('targetAudience', suggestion)}
-                      >
-                        {suggestion}
-                      </button>
-                    ))}
-                </div>
-              )}
-            </div>
+            <Input
+              id="targetAudience"
+              placeholder="e.g., Local customers, Small businesses"
+              {...register('targetAudience')}
+              disabled={isGenerating}
+            />
             {errors.targetAudience && (
               <p className="text-sm text-destructive">{errors.targetAudience.message}</p>
             )}
           </div>
 
-          {/* Tone Selection */}
+            {/* Content Tone */}
           <div className="space-y-2">
-            <Label className="text-base font-medium flex items-center gap-1">
-              What tone should your content have?
-              <span className="text-red-500 text-sm">*</span>
+            <Label htmlFor="tone">
+              Content Tone <span className="text-red-500">*</span>
             </Label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {toneOptions.map((toneOption) => {
-                const isSelected = watchedFields.tone === toneOption.value;
-                const Icon = toneOption.icon;
-
-                return (
-                  <button
-                    key={toneOption.value}
-                    type="button"
-                    onClick={() => {
-                      setValue('tone', toneOption.value, { shouldValidate: true });
-                    }}
-                    className={`p-3 rounded-lg border-2 transition-all touch-manipulation active:scale-[0.96] hover:shadow-md ${
-                      isSelected
-                        ? 'border-primary bg-primary/5 shadow-sm ring-2 ring-primary/20'
-                        : 'border-border hover:border-primary/50 bg-background hover:bg-gray-50'
-                    }`}
-                    disabled={isGenerating}
-                  >
-                    <div className="flex items-start gap-3 text-left">
-                      <div className={`p-2 rounded-lg ${isSelected ? 'bg-primary text-primary-foreground' : 'bg-gray-100 text-gray-600'}`}>
-                        <Icon className="h-4 w-4" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className={`font-medium text-sm ${isSelected ? 'text-primary' : 'text-gray-900'}`}>
-                          {toneOption.label}
-                        </div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          {toneOption.description}
-                        </div>
-                        {isSelected && (
-                          <div className="mt-2 p-2 bg-gray-50 rounded text-xs text-gray-600 italic">
-                            "{toneOption.example}"
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+            <Select
+              value={watchedFields.tone || 'professional'}
+              onValueChange={(value) => setValue('tone', value, { shouldValidate: true })}
+              disabled={isGenerating}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select tone" />
+              </SelectTrigger>
+              <SelectContent>
+                {toneOptions.map((toneOption) => (
+                  <SelectItem key={toneOption.value} value={toneOption.value}>
+                    {toneOption.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {errors.tone && (
               <p className="text-sm text-destructive">{errors.tone.message}</p>
             )}
-            <p className="text-xs text-muted-foreground">
-              Select the tone that best matches your brand voice and target audience <span className="text-red-500 font-medium">(required)</span>
-            </p>
           </div>
 
-          {/* Additional Context Input */}
+          {/* Additional Context */}
           <div className="space-y-2">
-            <Label htmlFor="additionalContext" className="text-base font-medium flex items-center gap-1">
+            <Label htmlFor="additionalContext">
               Additional Context
-              <span className="text-gray-500 text-sm">(optional)</span>
             </Label>
             <Textarea
               id="additionalContext"
-              placeholder="Tell us more about your preferences: specific keywords to include, topics to avoid, unique aspects of your business, target outcomes, etc."
+              placeholder="Any additional details or preferences..."
               {...register('additionalContext')}
-              className="text-base min-h-[100px] touch-manipulation active:scale-[0.99] transition-transform"
               disabled={isGenerating}
-              autoComplete="off"
             />
-            <p className="text-xs text-muted-foreground">
-              Help us create more personalized content by providing specific instructions and preferences <span className="text-gray-500 font-medium">(optional)</span>
-            </p>
           </div>
 
-          {/* Location Input */}
+          {/* Location */}
           <div className="space-y-2">
-            <Label htmlFor="location" className="text-base font-medium flex items-center gap-1">
+            <Label htmlFor="location">
               Location
-              <span className="text-gray-500 text-sm">(optional)</span>
             </Label>
             <LocationAutocomplete
               value={watchedFields.location || ''}
               onChange={(value) => setValue('location', value)}
               onLocationDetected={(locationData) => setDetailedLocation(locationData)}
-              placeholder="e.g., New York, London, Tokyo, or leave empty for general topics"
+              placeholder="e.g., New York, London"
               disabled={isGenerating}
-              className="text-base"
             />
-            {detailedLocation && (
-              <div className="text-xs text-green-600 bg-green-50 p-2 rounded border border-green-200">
-                <span className="font-medium">Enhanced location detected:</span> {detailedLocation.fullDisplay}
-                {detailedLocation.geographicContext && (
-                  <span className="ml-1">({detailedLocation.geographicContext} context)</span>
-                )}
-              </div>
-            )}
           </div>
 
-          {/* Cultural and Language Settings */}
-          <div className="border-t pt-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Languages className="h-5 w-5 text-primary" />
-              <h3 className="text-lg font-semibold">Cultural & Language Settings</h3>
+          {/* Cultural Settings with Enhanced UI */}
+          <div className="space-y-6">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Globe className="h-4 w-4 text-blue-600" />
+                <Label className="text-base font-medium">Regional Content Settings</Label>
+              </div>
+
+              <p className="text-sm text-muted-foreground">
+                Customize your content to sound authentic to your specific region and audience
+              </p>
             </div>
 
-            <div className="space-y-6">
-              {/* Language Preference */}
-              <div className="space-y-3">
-                <Label className="text-base font-medium flex items-center gap-2">
-                  <Globe className="h-4 w-4" />
-                  Language Preference
-                </Label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {languagePreferenceOptions.map((option) => {
-                    const isSelected = watchedFields.languagePreference === option.value;
-                    const Icon = option.icon;
+            {/* Language Preference with Visual Selection */}
+            <div className="space-y-3">
+              <Label htmlFor="languagePreference">
+                Language Preference
+              </Label>
+              <div className="grid grid-cols-1 gap-3">
+                {languagePreferenceOptions.map((option) => {
+                  const isSelected = watchedFields.languagePreference === option.value;
+                  const IconComponent = option.icon;
 
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => {
-                          setValue('languagePreference', option.value as 'english' | 'native' | 'cultural_english', { shouldValidate: true });
-                        }}
-                        className={`p-4 rounded-lg border-2 transition-all touch-manipulation active:scale-[0.96] hover:shadow-md ${
-                          isSelected
-                            ? 'border-primary bg-primary/5 shadow-sm ring-2 ring-primary/20'
-                            : 'border-border hover:border-primary/50 bg-background hover:bg-gray-50'
-                        }`}
-                        disabled={isGenerating}
-                      >
-                        <div className="flex items-start gap-3 text-left">
-                          <div className={`p-2 rounded-lg ${isSelected ? 'bg-primary text-primary-foreground' : 'bg-gray-100 text-gray-600'}`}>
-                            <Icon className="h-4 w-4" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className={`font-medium text-sm ${isSelected ? 'text-primary' : 'text-gray-900'}`}>
-                              {option.label}
-                            </div>
-                            <div className="text-xs text-gray-500 mt-1">
-                              {option.description}
-                            </div>
-                            {isSelected && (
-                              <div className="mt-2 p-2 bg-gray-50 rounded text-xs text-gray-600 italic">
-                                "{option.example}"
-                              </div>
-                            )}
-                          </div>
+                  return (
+                    <div
+                      key={option.value}
+                      className={`relative p-4 border-2 rounded-xl cursor-pointer transition-all ${
+                        isSelected
+                          ? option.selectedColor
+                          : option.color
+                      } hover:border-opacity-80`}
+                      onClick={() => setValue('languagePreference', option.value as 'english' | 'native' | 'cultural_english', { shouldValidate: true })}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 bg-white/50 rounded-lg">
+                          <IconComponent className="h-5 w-5" />
                         </div>
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Choose how you want your content to be generated - standard English, culturally-adapted English, or native local language
-                </p>
-              </div>
-
-              {/* Formality Level */}
-              <div className="space-y-3">
-                <Label className="text-base font-medium flex items-center gap-2">
-                  <Users className="h-4 w-4" />
-                  Formality Level
-                </Label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                  {formalityLevelOptions.map((option) => {
-                    const isSelected = watchedFields.formalityLevel === option.value;
-                    const Icon = option.icon;
-
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => {
-                          setValue('formalityLevel', option.value as 'formal' | 'professional' | 'casual' | 'slang_heavy', { shouldValidate: true });
-                        }}
-                        className={`p-3 rounded-lg border-2 transition-all touch-manipulation active:scale-[0.96] hover:shadow-md ${
-                          isSelected
-                            ? 'border-primary bg-primary/5 shadow-sm ring-2 ring-primary/20'
-                            : 'border-border hover:border-primary/50 bg-background hover:bg-gray-50'
-                        }`}
-                        disabled={isGenerating}
-                      >
-                        <div className="flex items-start gap-2 text-left">
-                          <div className={`p-1.5 rounded-lg ${isSelected ? 'bg-primary text-primary-foreground' : 'bg-gray-100 text-gray-600'}`}>
-                            <Icon className="h-3.5 w-3.5" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className={`font-medium text-xs ${isSelected ? 'text-primary' : 'text-gray-900'}`}>
-                              {option.label}
+                        <div className="flex-1">
+                          <div className="font-semibold text-sm">{option.label}</div>
+                          <div className="text-xs opacity-75 mt-1">{option.description}</div>
+                          {option.regionalExample && (
+                            <div className="mt-2 p-2 bg-white/30 rounded border text-xs">
+                              <span className="font-medium">Example:</span> {option.regionalExample}
                             </div>
-                            <div className="text-xs text-gray-500 mt-0.5">
-                              {option.description}
-                            </div>
-                            {isSelected && (
-                              <div className="mt-1.5 p-1.5 bg-gray-50 rounded text-xs text-gray-600 italic">
-                                "{option.example}"
-                              </div>
-                            )}
-                          </div>
+                          )}
                         </div>
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Select the formality level that matches your brand voice and audience expectations
-                </p>
-              </div>
-
-              {/* Content Purpose */}
-              <div className="space-y-3">
-                <Label className="text-base font-medium flex items-center gap-2">
-                  <Target className="h-4 w-4" />
-                  Content Purpose
-                </Label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                  {contentPurposeOptions.map((option) => {
-                    const isSelected = watchedFields.contentPurpose === option.value;
-                    const Icon = option.icon;
-
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => {
-                          setValue('contentPurpose', option.value as 'marketing' | 'educational' | 'conversational' | 'technical', { shouldValidate: true });
-                        }}
-                        className={`p-3 rounded-lg border-2 transition-all touch-manipulation active:scale-[0.96] hover:shadow-md ${
-                          isSelected
-                            ? 'border-primary bg-primary/5 shadow-sm ring-2 ring-primary/20'
-                            : 'border-border hover:border-primary/50 bg-background hover:bg-gray-50'
-                        }`}
-                        disabled={isGenerating}
-                      >
-                        <div className="flex items-start gap-2 text-left">
-                          <div className={`p-1.5 rounded-lg ${isSelected ? 'bg-primary text-primary-foreground' : 'bg-gray-100 text-gray-600'}`}>
-                            <Icon className="h-3.5 w-3.5" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className={`font-medium text-xs ${isSelected ? 'text-primary' : 'text-gray-900'}`}>
-                              {option.label}
+                        {isSelected && (
+                          <div className="absolute top-2 right-2">
+                            <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
                             </div>
-                            <div className="text-xs text-gray-500 mt-0.5">
-                              {option.description}
-                            </div>
-                            {isSelected && (
-                              <div className="mt-1.5 p-1.5 bg-gray-50 rounded text-xs text-gray-600 italic">
-                                "{option.example}"
-                              </div>
-                            )}
                           </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Define the primary purpose of your content to ensure it achieves your goals
-                </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
+
+            {/* Formality Level with Visual Selection */}
+            <div className="space-y-3">
+              <Label htmlFor="formalityLevel">
+                Formality Level
+              </Label>
+              <div className="grid grid-cols-2 gap-3">
+                {formalityLevelOptions.map((option) => {
+                  const isSelected = watchedFields.formalityLevel === option.value;
+                  const IconComponent = option.icon;
+
+                  return (
+                    <div
+                      key={option.value}
+                      className={`relative p-3 border-2 rounded-lg cursor-pointer transition-all ${
+                        isSelected
+                          ? option.selectedColor
+                          : option.color
+                      } hover:border-opacity-80`}
+                      onClick={() => setValue('formalityLevel', option.value as 'formal' | 'professional' | 'casual' | 'slang_heavy', { shouldValidate: true })}
+                    >
+                      <div className="flex items-center gap-2">
+                        <IconComponent className="h-4 w-4" />
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">{option.label}</div>
+                          <div className="text-xs opacity-75 mt-1">{option.example}</div>
+                        </div>
+                        {isSelected && (
+                          <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Content Purpose with Visual Selection */}
+            <div className="space-y-3">
+              <Label htmlFor="contentPurpose">
+                Content Purpose
+              </Label>
+              <div className="grid grid-cols-2 gap-3">
+                {contentPurposeOptions.map((option) => {
+                  const isSelected = watchedFields.contentPurpose === option.value;
+                  const IconComponent = option.icon;
+
+                  return (
+                    <div
+                      key={option.value}
+                      className={`relative p-3 border-2 rounded-lg cursor-pointer transition-all ${
+                        isSelected
+                          ? option.selectedColor
+                          : option.color
+                      } hover:border-opacity-80`}
+                      onClick={() => setValue('contentPurpose', option.value as 'marketing' | 'educational' | 'conversational' | 'technical', { shouldValidate: true })}
+                    >
+                      <div className="flex items-center gap-2">
+                        <IconComponent className="h-4 w-4" />
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">{option.label}</div>
+                          <div className="text-xs opacity-75 mt-1">{option.example}</div>
+                        </div>
+                        {isSelected && (
+                          <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Regional Preview */}
+            {(watchedFields.location || watchedFields.languagePreference) && (
+              <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-xl">
+                <div className="flex items-center gap-2 mb-3">
+                  <MapPin className="h-4 w-4 text-blue-600" />
+                  <Label className="text-sm font-medium">Regional Content Preview</Label>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">Region:</span>
+                    <span className="text-blue-700">{watchedFields.location || 'Not specified'}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">Language Style:</span>
+                    <span className="text-purple-700">
+                      {languagePreferenceOptions.find(opt => opt.value === watchedFields.languagePreference)?.label || 'Standard English'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">Formality:</span>
+                    <span className="text-green-700">
+                      {formalityLevelOptions.find(opt => opt.value === watchedFields.formalityLevel)?.label || 'Professional'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">Purpose:</span>
+                    <span className="text-orange-700">
+                      {contentPurposeOptions.find(opt => opt.value === watchedFields.contentPurpose)?.label || 'Marketing'}
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-3 p-3 bg-white/50 rounded-lg">
+                  <div className="text-xs font-medium text-gray-600 mb-1">Sample Content Style:</div>
+                  <div className="text-xs text-gray-700 italic">
+                    {getRegionalContentPreview(watchedFields.languagePreference, watchedFields.formalityLevel, watchedFields.location)}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {errors.languagePreference && (
+              <p className="text-sm text-destructive">{errors.languagePreference.message}</p>
+            )}
+            {errors.formalityLevel && (
+              <p className="text-sm text-destructive">{errors.formalityLevel.message}</p>
+            )}
+            {errors.contentPurpose && (
+              <p className="text-sm text-destructive">{errors.contentPurpose.message}</p>
+            )}
           </div>
 
           {/* Advanced Settings */}
@@ -874,150 +830,61 @@ export function GeneratorForm({ onSubmit, isGenerating, usageStats }: GeneratorF
 
             {showAdvancedSettings && (
               <div className="mt-6 space-y-6">
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg mb-4">
-                  <div className="flex items-center gap-2 text-blue-800">
-                    <Globe className="h-4 w-4" />
-                    <h4 className="font-medium">Website Configuration</h4>
-                  </div>
-                  <p className="text-sm text-blue-700 mt-2">
-                    Your primary website URL is automatically used from your Security settings.
-                    To update it, go to Settings → Security and update your Website Configuration.
-                  </p>
-                </div>
-
-                {/* Primary Website URL Display */}
-                <div className="space-y-2">
+                
+                {/* Competitor URLs Input */}
+                <div className="space-y-3">
                   <Label className="text-base font-medium flex items-center gap-2">
-                    <Globe className="h-4 w-4" />
-                    Your Website URL
-                  </Label>
-                  {isLoadingWebsite ? (
-                    <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
-                        <span className="text-sm text-gray-600">Loading website URL...</span>
-                      </div>
-                    </div>
-                  ) : primaryWebsiteUrl ? (
-                    <div className="space-y-3">
-                      <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="h-2 w-2 bg-green-600 rounded-full"></div>
-                            <span className="text-sm font-medium text-green-800">Primary Website</span>
-                          </div>
-                          <span className="text-sm text-gray-600 font-mono">{primaryWebsiteUrl}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          This website URL will be used for content generation and SEO analysis.
-                        </p>
-                      </div>
-
-                      {/* Cache Status Display */}
-                      {isCheckingCache ? (
-                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                          <div className="flex items-center gap-2">
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                            <span className="text-sm text-blue-800">Checking cache status...</span>
-                          </div>
-                        </div>
-                      ) : websiteCacheStatus ? (
-                        <div className={`p-3 border rounded-lg ${
-                          websiteCacheStatus.recentlyCrawled
-                            ? 'bg-green-50 border-green-200'
-                            : 'bg-yellow-50 border-yellow-200'
-                        }`}>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              {websiteCacheStatus.recentlyCrawled ? (
-                                <CheckCircle className="h-4 w-4 text-green-600" />
-                              ) : (
-                                <Clock className="h-4 w-4 text-yellow-600" />
-                              )}
-                              <span className={`text-sm font-medium ${
-                                websiteCacheStatus.recentlyCrawled
-                                  ? 'text-green-800'
-                                  : 'text-yellow-800'
-                              }`}>
-                                Cache Status
-                              </span>
-                            </div>
-                            <span className="text-xs text-gray-600">
-                              {websiteCacheStatus.recentlyCrawled
-                                ? `Recently crawled (${websiteCacheStatus.daysSinceCrawl} days ago)`
-                                : websiteCacheStatus.lastCrawledAt
-                                  ? `Crawled ${websiteCacheStatus.daysSinceCrawl} days ago`
-                                  : 'Never crawled'
-                              }
-                            </span>
-                          </div>
-                          <p className={`text-xs mt-2 ${
-                            websiteCacheStatus.recentlyCrawled
-                              ? 'text-green-700'
-                              : 'text-yellow-700'
-                          }`}>
-                            {websiteCacheStatus.recentlyCrawled
-                              ? 'Your website was recently analyzed. Using cached data to save generation time.'
-                              : 'Your website data is outdated. It will be re-crawled during generation.'
-                            }
-                          </p>
-                        </div>
-                      ) : null}
-
-                      {/* Re-crawl Button */}
-                      {websiteCacheStatus && websiteCacheStatus.recentlyCrawled && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={handleForceRecrawl}
-                          disabled={isGenerating || forceRecrawl}
-                          className="w-full flex items-center gap-2"
-                        >
-                          <RefreshCw className={`h-4 w-4 ${forceRecrawl ? 'animate-spin' : ''}`} />
-                          {forceRecrawl ? 'Will Re-crawl on Generation' : 'Force Re-crawl Website'}
-                        </Button>
-                      )}
-
-                      {forceRecrawl && (
-                        <div className="p-2 bg-blue-50 border border-blue-200 rounded-lg">
-                          <p className="text-xs text-blue-700">
-                            ✓ Your website will be re-crawled on the next generation, ignoring cached data.
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                      <div className="flex items-center gap-2 text-orange-800">
-                        <Info className="h-4 w-4" />
-                        <span className="text-sm font-medium">No Website URL Set</span>
-                      </div>
-                      <p className="text-xs text-orange-700 mt-2">
-                        Please set your primary website URL in Settings → Security to enable better content generation.
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Competitor URL Input */}
-                <div className="space-y-2">
-                  <Label htmlFor="competitorUrl" className="text-base font-medium flex items-center gap-2">
                     <TrendingUp className="h-4 w-4" />
-                    Competitor Website URL (optional)
+                    Competitor Websites (optional)
                   </Label>
-                  <Input
-                    id="competitorUrl"
-                    placeholder="https://competitor.com"
-                    {...register('competitorUrl')}
-                    className="text-base h-11"
-                    disabled={isGenerating || isCrawling}
-                  />
-                  {errors.competitorUrl && (
-                    <p className="text-sm text-destructive">{errors.competitorUrl.message}</p>
+                  <div className="space-y-2">
+                    {competitorUrls.map((url, index) => (
+                      <div key={index} className="flex gap-2">
+                        <Input
+                          placeholder="https://competitor.com"
+                          value={url}
+                          onChange={(e) => updateCompetitorUrl(index, e.target.value)}
+                          className="text-base h-11 flex-1"
+                          disabled={isGenerating}
+                        />
+                        {competitorUrls.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={() => removeCompetitorUrl(index)}
+                            disabled={isGenerating}
+                            className="h-11 w-11 flex-shrink-0"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={addCompetitorUrl}
+                      disabled={isGenerating || competitorUrls.length >= 5}
+                      className="flex items-center gap-2"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add Competitor
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      Add up to 5 competitor websites for analysis
+                    </span>
+                  </div>
+                  {errors.competitorUrls && (
+                    <p className="text-sm text-destructive">
+                      {errors.competitorUrls.root?.message || 'Please enter valid competitor URLs'}
+                    </p>
                   )}
                   <p className="text-xs text-muted-foreground">
-                    Analyze competitor content to find opportunities and generate competitive topics
+                    Enter competitor websites to analyze their content and generate topics that can help you compete in search results
                   </p>
                 </div>
               </div>
@@ -1028,12 +895,12 @@ export function GeneratorForm({ onSubmit, isGenerating, usageStats }: GeneratorF
           <Button
             type="submit"
             className="w-full h-16 text-lg font-semibold touch-manipulation active:scale-[0.98] transition-transform"
-            disabled={isGenerating || isCrawling}
+            disabled={isGenerating}
           >
-            {isGenerating || isCrawling ? (
+            {isGenerating ? (
               <>
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                {isCrawling ? 'Analyzing Website...' : 'Generating Topics...'}
+                Generating Topics...
               </>
             ) : (
               <>

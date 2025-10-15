@@ -52,6 +52,61 @@ export interface CompetitorAnalysis {
   };
 }
 
+export interface CompetitiveAdvantage {
+  type: 'service_quality' | 'pricing' | 'expertise' | 'coverage' | 'technology' | 'customer_service' | 'brand_recognition' | 'speed' | 'convenience';
+  advantage: string;
+  evidence: string[];
+  impactLevel: 'low' | 'medium' | 'high' | 'critical';
+  targetable: boolean; // Can we create content to address this advantage
+  counterStrategy: string;
+}
+
+export interface CompetitorAnalysis {
+  competitorInfo: {
+    domain: string;
+    name: string;
+    description: string;
+    estimatedTraffic: number;
+    authorityScore: number;
+  };
+  contentStrategy: {
+    topicClusters: string[];
+    contentGaps: string[];
+    contentStrengths: string[];
+    contentFrequency: 'high' | 'medium' | 'low';
+    avgContentLength: number;
+    contentTone: string;
+  };
+  seoPerformance: {
+    rankingKeywords: number;
+    topRankingTopics: string[];
+    keywordGaps: string[];
+    backlinkProfile: 'strong' | 'moderate' | 'weak';
+    technicalSEO: 'excellent' | 'good' | 'fair' | 'poor';
+  };
+  marketPosition: {
+    uniqueValueProps: string[];
+    differentiators: string[];
+    targetAudience: string[];
+    pricingPosition: 'premium' | 'mid-range' | 'budget';
+    serviceAreas: string[];
+  };
+  contentOpportunities: {
+    underservedTopics: string[];
+    seasonalOpportunities: string[];
+    localIntentGaps: string[];
+    questionBasedContent: string[];
+    comparisonOpportunities: string[];
+  };
+  strategicInsights: {
+    competitiveAdvantages: string[];
+    weaknesses: string[];
+    marketOpportunities: string[];
+    threats: string[];
+  };
+  advantages: CompetitiveAdvantage[]; // New detailed advantages analysis
+}
+
 export interface CompetitiveIntelligenceReport {
   primaryCompetitors: CompetitorAnalysis[];
   marketAnalysis: {
@@ -78,6 +133,12 @@ export interface CompetitiveIntelligenceReport {
     weaknesses: string[];
     opportunities: string[];
     threats: string[];
+  };
+  competitorAdvantages: {
+    criticalThreats: CompetitiveAdvantage[];
+    addressableAdvantages: CompetitiveAdvantage[];
+    strategicCounters: CompetitiveAdvantage[];
+    comparisonOpportunities: CompetitiveAdvantage[];
   };
 }
 
@@ -124,11 +185,16 @@ export class CompetitorIntelligenceAnalyzer {
     // Create SWOT analysis
     const swotAnalysis = this.createSWOTAnalysis(businessWebsite, primaryCompetitors, marketAnalysis);
 
+    // Analyze competitor advantages for strategic positioning
+    const competitorAdvantages = this.analyzeCompetitorAdvantagesStrategic(primaryCompetitors, businessWebsite);
+
     console.log('✅ [COMPETITOR INTELLIGENCE] Analysis completed', {
       competitorsAnalyzed: primaryCompetitors.length,
       marketSize: marketAnalysis.totalMarketSize,
       contentGaps: competitiveGaps.contentGaps.length,
-      strategicRecommendations: strategicRecommendations.contentStrategy.length
+      strategicRecommendations: strategicRecommendations.contentStrategy.length,
+      competitorAdvantages: competitorAdvantages.criticalThreats.length,
+      addressableOpportunities: competitorAdvantages.addressableAdvantages.length
     });
 
     return {
@@ -136,7 +202,8 @@ export class CompetitorIntelligenceAnalyzer {
       marketAnalysis,
       competitiveGaps,
       strategicRecommendations,
-      swotAnalysis
+      swotAnalysis,
+      competitorAdvantages
     };
   }
 
@@ -152,13 +219,17 @@ export class CompetitorIntelligenceAnalyzer {
     // Analyze competitor brand voice
     const competitorBrandVoice = analyzeBrandVoice(competitorSite);
 
+    // Analyze competitor advantages in detail
+    const advantages = await this.analyzeCompetitorAdvantages(competitorSite, businessSite, competitorOfferings, businessOfferings);
+
     return {
       competitorInfo: this.analyzeCompetitorInfo(competitorSite),
       contentStrategy: this.analyzeContentStrategy(competitorSite, competitorBrandVoice),
       seoPerformance: this.analyzeSEOPerformance(competitorSite, businessSite),
       marketPosition: this.analyzeMarketPosition(competitorOfferings, competitorBrandVoice),
       contentOpportunities: this.identifyContentOpportunities(competitorSite, businessSite, competitorOfferings),
-      strategicInsights: this.generateStrategicInsights(competitorSite, businessSite, competitorOfferings)
+      strategicInsights: this.generateStrategicInsights(competitorSite, businessSite, competitorOfferings),
+      advantages
     };
   }
 
@@ -292,6 +363,324 @@ export class CompetitorIntelligenceAnalyzer {
       opportunities: this.identifyOpportunities(businessSite, competitors, market),
       threats: this.identifyThreats(businessSite, competitors, market)
     };
+  }
+
+  // Enhanced competitor advantage analysis methods
+  private async analyzeCompetitorAdvantages(
+    competitorSite: WebsiteAnalysisResult,
+    businessSite: WebsiteAnalysisResult,
+    competitorOfferings: BusinessOfferings,
+    businessOfferings: BusinessOfferings
+  ): Promise<CompetitiveAdvantage[]> {
+    const advantages: CompetitiveAdvantage[] = [];
+    const allContent = competitorSite.crawledPages.map(page => page.content).join(' ').toLowerCase();
+
+    // Analyze service quality advantages
+    const serviceQualityAdvantages = this.analyzeServiceQualityAdvantages(competitorSite, competitorOfferings, allContent);
+    advantages.push(...serviceQualityAdvantages);
+
+    // Analyze pricing advantages
+    const pricingAdvantages = this.analyzePricingAdvantages(competitorSite, competitorOfferings, businessOfferings, allContent);
+    advantages.push(...pricingAdvantages);
+
+    // Analyze expertise advantages
+    const expertiseAdvantages = this.analyzeExpertiseAdvantages(competitorSite, competitorOfferings, allContent);
+    advantages.push(...expertiseAdvantages);
+
+    // Analyze coverage advantages
+    const coverageAdvantages = this.analyzeCoverageAdvantages(competitorSite, competitorOfferings, businessOfferings, allContent);
+    advantages.push(...coverageAdvantages);
+
+    // Analyze technology advantages
+    const technologyAdvantages = this.analyzeTechnologyAdvantages(competitorSite, allContent);
+    advantages.push(...technologyAdvantages);
+
+    // Analyze customer service advantages
+    const customerServiceAdvantages = this.analyzeCustomerServiceAdvantages(competitorSite, allContent);
+    advantages.push(...customerServiceAdvantages);
+
+    // Analyze speed/convenience advantages
+    const speedAdvantages = this.analyzeSpeedAdvantages(competitorSite, allContent);
+    advantages.push(...speedAdvantages);
+
+    return advantages.sort((a, b) => {
+      const impactOrder = { 'critical': 4, 'high': 3, 'medium': 2, 'low': 1 };
+      return impactOrder[b.impactLevel] - impactOrder[a.impactLevel];
+    });
+  }
+
+  private analyzeCompetitorAdvantagesStrategic(
+    primaryCompetitors: CompetitorAnalysis[],
+    businessSite: WebsiteAnalysisResult
+  ): CompetitiveIntelligenceReport['competitorAdvantages'] {
+    const allAdvantages = primaryCompetitors.flatMap(comp => comp.advantages);
+
+    // Categorize advantages by strategic importance
+    const criticalThreats = allAdvantages.filter(adv =>
+      adv.impactLevel === 'critical' && adv.targetable
+    );
+
+    const addressableAdvantages = allAdvantages.filter(adv =>
+      adv.targetable && (adv.impactLevel === 'high' || adv.impactLevel === 'medium')
+    );
+
+    const strategicCounters = allAdvantages.filter(adv =>
+      adv.targetable && adv.counterStrategy.includes('strategic')
+    );
+
+    const comparisonOpportunities = allAdvantages.filter(adv =>
+      adv.type === 'pricing' || adv.type === 'service_quality' || adv.type === 'expertise'
+    );
+
+    return {
+      criticalThreats,
+      addressableAdvantages,
+      strategicCounters,
+      comparisonOpportunities
+    };
+  }
+
+  private analyzeServiceQualityAdvantages(
+    website: WebsiteAnalysisResult,
+    offerings: BusinessOfferings,
+    content: string
+  ): CompetitiveAdvantage[] {
+    const advantages: CompetitiveAdvantage[] = [];
+    const qualityIndicators = [
+      'certified', 'licensed', 'insured', 'guarantee', 'warranty',
+      'quality', 'professional', 'expert', 'trained', 'experienced',
+      'award winning', 'best rated', 'top rated', '5 star', 'five star'
+    ];
+
+    const foundIndicators = qualityIndicators.filter(indicator => content.includes(indicator));
+
+    if (foundIndicators.length >= 3) {
+      advantages.push({
+        type: 'service_quality',
+        advantage: 'Strong quality credentials and guarantees',
+        evidence: foundIndicators.slice(0, 5),
+        impactLevel: 'high',
+        targetable: true,
+        counterStrategy: 'Highlight unique quality aspects and differentiators'
+      });
+    }
+
+    if (offerings.services.some(s => s.qualityIndicators && s.qualityIndicators.length > 0)) {
+      advantages.push({
+        type: 'service_quality',
+        advantage: 'Service-specific quality certifications',
+        evidence: offerings.services.filter(s => s.qualityIndicators && s.qualityIndicators.length > 0).map(s => s.name),
+        impactLevel: 'medium',
+        targetable: true,
+        counterStrategy: 'Create comparison content showing quality differences'
+      });
+    }
+
+    return advantages;
+  }
+
+  private analyzePricingAdvantages(
+    competitorSite: WebsiteAnalysisResult,
+    competitorOfferings: BusinessOfferings,
+    businessOfferings: BusinessOfferings,
+    content: string
+  ): CompetitiveAdvantage[] {
+    const advantages: CompetitiveAdvantage[] = [];
+    const pricingIndicators = [
+      'affordable', 'cheap', 'low cost', 'budget', 'discount',
+      'competitive pricing', 'best price', 'price match', 'free estimate',
+      'financing', 'payment plans', 'affordable payment'
+    ];
+
+    const foundIndicators = pricingIndicators.filter(indicator => content.includes(indicator));
+
+    if (foundIndicators.length >= 2) {
+      const competitorPricingPosition = this.assessPricingPosition(competitorOfferings);
+      const businessPricingPosition = this.assessPricingPosition(businessOfferings);
+
+      let impactLevel: 'low' | 'medium' | 'high' | 'critical' = 'medium';
+      if (competitorPricingPosition === 'budget' && businessPricingPosition === 'premium') {
+        impactLevel = 'critical';
+      } else if (competitorPricingPosition === 'budget' && businessPricingPosition === 'mid-range') {
+        impactLevel = 'high';
+      }
+
+      advantages.push({
+        type: 'pricing',
+        advantage: `Competitive pricing positioning (${competitorPricingPosition})`,
+        evidence: foundIndicators.slice(0, 4),
+        impactLevel,
+        targetable: true,
+        counterStrategy: impactLevel === 'critical'
+          ? 'Create value-focused content justifying premium positioning'
+          : 'Develop comparison content highlighting value vs price'
+      });
+    }
+
+    return advantages;
+  }
+
+  private analyzeExpertiseAdvantages(
+    website: WebsiteAnalysisResult,
+    offerings: BusinessOfferings,
+    content: string
+  ): CompetitiveAdvantage[] {
+    const advantages: CompetitiveAdvantage[] = [];
+    const expertiseIndicators = [
+      'years experience', 'decades experience', 'since 19', 'established',
+      'specialist', 'expert', 'master', 'certified technician', 'licensed',
+      'trained', 'skilled', 'knowledgeable', 'professional'
+    ];
+
+    const foundIndicators = expertiseIndicators.filter(indicator => content.includes(indicator));
+
+    if (foundIndicators.length >= 3) {
+      advantages.push({
+        type: 'expertise',
+        advantage: 'Strong expertise and experience credentials',
+        evidence: foundIndicators.slice(0, 4),
+        impactLevel: 'medium',
+        targetable: true,
+        counterStrategy: 'Highlight unique expertise areas and specializations'
+      });
+    }
+
+    // Check for specialized services
+    const specializedServices = offerings.services.filter(s =>
+      s.specialization || s.categories.includes('specialized')
+    );
+
+    if (specializedServices.length > 0) {
+      advantages.push({
+        type: 'expertise',
+        advantage: 'Specialized service offerings',
+        evidence: specializedServices.map(s => s.name),
+        impactLevel: 'high',
+        targetable: true,
+        counterStrategy: 'Create content addressing niche vs general service trade-offs'
+      });
+    }
+
+    return advantages;
+  }
+
+  private analyzeCoverageAdvantages(
+    competitorSite: WebsiteAnalysisResult,
+    competitorOfferings: BusinessOfferings,
+    businessOfferings: BusinessOfferings,
+    content: string
+  ): CompetitiveAdvantage[] {
+    const advantages: CompetitiveAdvantage[] = [];
+
+    // Compare service areas
+    if (competitorOfferings.serviceAreas.length > businessOfferings.serviceAreas.length) {
+      advantages.push({
+        type: 'coverage',
+        advantage: 'Broader service area coverage',
+        evidence: competitorOfferings.serviceAreas.slice(0, 5),
+        impactLevel: 'medium',
+        targetable: true,
+        counterStrategy: 'Emphasize quality of service in focused areas'
+      });
+    }
+
+    // Compare service range
+    if (competitorOfferings.services.length > businessOfferings.services.length * 1.5) {
+      advantages.push({
+        type: 'coverage',
+        advantage: 'Comprehensive service range',
+        evidence: [`Offers ${competitorOfferings.services.length} services vs ${businessOfferings.services.length}`],
+        impactLevel: 'medium',
+        targetable: true,
+        counterStrategy: 'Create content on depth vs breadth of services'
+      });
+    }
+
+    // Check for 24/7 emergency services
+    if (competitorOfferings.emergencyServices.length > 0 &&
+        competitorOfferings.emergencyServices.some(s => s.availability?.includes('24/7'))) {
+      advantages.push({
+        type: 'coverage',
+        advantage: '24/7 emergency service availability',
+        evidence: competitorOfferings.emergencyServices.map(s => s.name),
+        impactLevel: 'high',
+        targetable: true,
+        counterStrategy: 'Highlight response time and service quality during business hours'
+      });
+    }
+
+    return advantages;
+  }
+
+  private analyzeTechnologyAdvantages(website: WebsiteAnalysisResult, content: string): CompetitiveAdvantage[] {
+    const advantages: CompetitiveAdvantage[] = [];
+    const technologyIndicators = [
+      'modern equipment', 'latest technology', 'advanced tools',
+      'state of the art', 'cutting edge', 'innovative', 'digital',
+      'software', 'technology', 'equipment', 'tools', 'modern'
+    ];
+
+    const foundIndicators = technologyIndicators.filter(indicator => content.includes(indicator));
+
+    if (foundIndicators.length >= 3) {
+      advantages.push({
+        type: 'technology',
+        advantage: 'Advanced technology and equipment',
+        evidence: foundIndicators.slice(0, 4),
+        impactLevel: 'medium',
+        targetable: true,
+        counterStrategy: 'Focus on proven methods and customer service over technology'
+      });
+    }
+
+    return advantages;
+  }
+
+  private analyzeCustomerServiceAdvantages(website: WebsiteAnalysisResult, content: string): CompetitiveAdvantage[] {
+    const advantages: CompetitiveAdvantage[] = [];
+    const serviceIndicators = [
+      'customer service', 'customer satisfaction', 'satisfaction guaranteed',
+      'friendly service', 'professional service', 'responsive', 'available',
+      'support', 'help', 'assistance', 'customer care'
+    ];
+
+    const foundIndicators = serviceIndicators.filter(indicator => content.includes(indicator));
+
+    if (foundIndicators.length >= 3) {
+      advantages.push({
+        type: 'customer_service',
+        advantage: 'Strong customer service focus',
+        evidence: foundIndicators.slice(0, 4),
+        impactLevel: 'medium',
+        targetable: true,
+        counterStrategy: 'Highlight unique customer service approaches and personalization'
+      });
+    }
+
+    return advantages;
+  }
+
+  private analyzeSpeedAdvantages(website: WebsiteAnalysisResult, content: string): CompetitiveAdvantage[] {
+    const advantages: CompetitiveAdvantage[] = [];
+    const speedIndicators = [
+      'fast', 'quick', 'rapid', 'same day', 'next day', 'immediate',
+      'emergency', 'urgent', 'prompt', 'efficient', 'timely'
+    ];
+
+    const foundIndicators = speedIndicators.filter(indicator => content.includes(indicator));
+
+    if (foundIndicators.length >= 3) {
+      advantages.push({
+        type: 'speed',
+        advantage: 'Fast service and quick response times',
+        evidence: foundIndicators.slice(0, 4),
+        impactLevel: 'high',
+        targetable: true,
+        counterStrategy: 'Emphasize quality over speed and thorough service'
+      });
+    }
+
+    return advantages;
   }
 
   // Helper methods for analysis
@@ -710,6 +1099,281 @@ export class CompetitorIntelligenceAnalyzer {
       'Competitive content saturation',
       'Changing market dynamics'
     ];
+  }
+
+  /**
+   * Generate counter-topics to address competitor advantages
+   */
+  generateCounterTopics(
+    competitorAdvantages: CompetitiveAdvantage[],
+    businessContext: {
+      businessType: string;
+      targetAudience: string;
+      location?: string;
+      uniqueValueProps: string[];
+    }
+  ): Array<{
+    topic: string;
+    type: 'counter' | 'comparison' | 'differentiator' | 'value_proposition';
+    targetAdvantage: CompetitiveAdvantage;
+    reasoning: string;
+    searchIntent: 'informational' | 'commercial' | 'transactional';
+  }> {
+    const counterTopics: Array<{
+      topic: string;
+      type: 'counter' | 'comparison' | 'differentiator' | 'value_proposition';
+      targetAdvantage: CompetitiveAdvantage;
+      reasoning: string;
+      searchIntent: 'informational' | 'commercial' | 'transactional';
+    }> = [];
+
+    competitorAdvantages.forEach(advantage => {
+      switch (advantage.type) {
+        case 'pricing':
+          counterTopics.push(...this.generatePricingCounterTopics(advantage, businessContext));
+          break;
+        case 'service_quality':
+          counterTopics.push(...this.generateQualityCounterTopics(advantage, businessContext));
+          break;
+        case 'expertise':
+          counterTopics.push(...this.generateExpertiseCounterTopics(advantage, businessContext));
+          break;
+        case 'coverage':
+          counterTopics.push(...this.generateCoverageCounterTopics(advantage, businessContext));
+          break;
+        case 'speed':
+          counterTopics.push(...this.generateSpeedCounterTopics(advantage, businessContext));
+          break;
+        case 'customer_service':
+          counterTopics.push(...this.generateCustomerServiceCounterTopics(advantage, businessContext));
+          break;
+        case 'technology':
+          counterTopics.push(...this.generateTechnologyCounterTopics(advantage, businessContext));
+          break;
+        default:
+          counterTopics.push(...this.generateGenericCounterTopics(advantage, businessContext));
+      }
+    });
+
+    return counterTopics;
+  }
+
+  private generatePricingCounterTopics(
+    advantage: CompetitiveAdvantage,
+    context: any
+  ) {
+    const topics = [];
+    const { businessType, location } = context;
+
+    if (advantage.impactLevel === 'critical') {
+      topics.push({
+        topic: `Why Premium ${businessType} Services Are Worth The Investment`,
+        type: 'value_proposition' as const,
+        targetAdvantage: advantage,
+        reasoning: 'Counters competitor budget positioning by emphasizing value over price',
+        searchIntent: 'commercial' as const
+      });
+
+      if (location) {
+        topics.push({
+          topic: `The True Cost of Cheap ${businessType} in ${location}`,
+          type: 'counter' as const,
+          targetAdvantage: advantage,
+          reasoning: 'Highlights risks and hidden costs of budget competitors',
+          searchIntent: 'informational' as const
+        });
+      }
+    }
+
+    topics.push({
+      topic: `${businessType} Price vs Value: What You're Really Paying For`,
+      type: 'comparison' as const,
+      targetAdvantage: advantage,
+      reasoning: 'Direct comparison focusing on long-term value',
+      searchIntent: 'commercial' as const
+    });
+
+    return topics;
+  }
+
+  private generateQualityCounterTopics(
+    advantage: CompetitiveAdvantage,
+    context: any
+  ) {
+    const topics = [];
+    const { businessType, location, uniqueValueProps } = context;
+
+    topics.push({
+      topic: `What Sets Top-Quality ${businessType} Services Apart`,
+      type: 'differentiator' as const,
+      targetAdvantage: advantage,
+      reasoning: 'Establishes quality criteria where competitor may fall short',
+      searchIntent: 'informational' as const
+    });
+
+    if (uniqueValueProps.length > 0) {
+      topics.push({
+        topic: `${uniqueValueProps[0]}: The ${businessType} Quality Difference`,
+        type: 'value_proposition' as const,
+        targetAdvantage: advantage,
+        reasoning: 'Highlights unique quality aspects competitors lack',
+        searchIntent: 'commercial' as const
+      });
+    }
+
+    return topics;
+  }
+
+  private generateExpertiseCounterTopics(
+    advantage: CompetitiveAdvantage,
+    context: any
+  ) {
+    const topics = [];
+    const { businessType, location } = context;
+
+    topics.push({
+      topic: `Specialized vs General ${businessType}: When Expertise Matters`,
+      type: 'comparison' as const,
+      targetAdvantage: advantage,
+      reasoning: 'Positions specialized expertise as superior to general knowledge',
+      searchIntent: 'informational' as const
+    });
+
+    topics.push({
+      topic: `Questions to Ask Before Hiring a ${businessType} Professional`,
+      type: 'differentiator' as const,
+      targetAdvantage: advantage,
+      reasoning: 'Educates customers on expertise indicators competitors may lack',
+      searchIntent: 'informational' as const
+    });
+
+    return topics;
+  }
+
+  private generateCoverageCounterTopics(
+    advantage: CompetitiveAdvantage,
+    context: any
+  ) {
+    const topics = [];
+    const { businessType, location } = context;
+
+    if (advantage.advantage.includes('24/7')) {
+      topics.push({
+        topic: `Quality ${businessType} Service vs 24/7 Availability: What's More Important?`,
+        type: 'comparison' as const,
+        targetAdvantage: advantage,
+        reasoning: 'Questions the value of 24/7 service vs business-hours quality',
+        searchIntent: 'informational' as const
+      });
+    }
+
+    if (advantage.advantage.includes('service area')) {
+      topics.push({
+        topic: `Local ${businessType} Expert: Better Than Large Service Areas`,
+        type: 'value_proposition' as const,
+        targetAdvantage: advantage,
+        reasoning: 'Positions local expertise as superior to broad coverage',
+        searchIntent: 'commercial' as const
+      });
+    }
+
+    return topics;
+  }
+
+  private generateSpeedCounterTopics(
+    advantage: CompetitiveAdvantage,
+    context: any
+  ) {
+    const topics = [];
+    const { businessType } = context;
+
+    topics.push({
+      topic: `Fast vs Right: Why ${businessType} Quality Beats Speed`,
+      type: 'counter' as const,
+      targetAdvantage: advantage,
+      reasoning: 'Challenges competitor speed advantage with quality focus',
+      searchIntent: 'informational' as const
+    });
+
+    topics.push({
+      topic: `How to Spot Rushed ${businessType} Work (And Avoid It)`,
+      type: 'counter' as const,
+      targetAdvantage: advantage,
+      reasoning: 'Educates on risks of fast service that may lack quality',
+      searchIntent: 'informational' as const
+    });
+
+    return topics;
+  }
+
+  private generateCustomerServiceCounterTopics(
+    advantage: CompetitiveAdvantage,
+    context: any
+  ) {
+    const topics = [];
+    const { businessType } = context;
+
+    topics.push({
+      topic: `What Makes Exceptional ${businessType} Customer Service`,
+      type: 'differentiator' as const,
+      targetAdvantage: advantage,
+      reasoning: 'Sets higher customer service standards than competitors',
+      searchIntent: 'informational' as const
+    });
+
+    topics.push({
+      topic: `${businessType} Service: Beyond Basic Customer Support`,
+      type: 'value_proposition' as const,
+      targetAdvantage: advantage,
+      reasoning: 'Positions superior customer service as key differentiator',
+      searchIntent: 'commercial' as const
+    });
+
+    return topics;
+  }
+
+  private generateTechnologyCounterTopics(
+    advantage: CompetitiveAdvantage,
+    context: any
+  ) {
+    const topics = [];
+    const { businessType } = context;
+
+    topics.push({
+      topic: `Modern Tools vs Proven Methods in ${businessType}`,
+      type: 'comparison' as const,
+      targetAdvantage: advantage,
+      reasoning: 'Questions the value of new technology over proven approaches',
+      searchIntent: 'informational' as const
+    });
+
+    topics.push({
+      topic: `Does Your ${businessType} Need the Latest Technology?`,
+      type: 'counter' as const,
+      targetAdvantage: advantage,
+      reasoning: 'Challenges assumption that technology equals better service',
+      searchIntent: 'informational' as const
+    });
+
+    return topics;
+  }
+
+  private generateGenericCounterTopics(
+    advantage: CompetitiveAdvantage,
+    context: any
+  ) {
+    const topics = [];
+    const { businessType } = context;
+
+    topics.push({
+      topic: `Choosing the Right ${businessType}: More Than Just ${advantage.advantage}`,
+      type: 'counter' as const,
+      targetAdvantage: advantage,
+      reasoning: 'Minimizes importance of competitor advantage',
+      searchIntent: 'informational' as const
+    });
+
+    return topics;
   }
 }
 

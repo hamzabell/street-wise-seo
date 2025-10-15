@@ -9,8 +9,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
 import {
-  Globe,
   TrendingUp,
   Search,
   Settings,
@@ -25,117 +25,83 @@ import {
   Clock,
   RefreshCw,
   ExternalLink,
+  Globe,
+  MessageCircle,
+  Languages,
+  BookOpen,
+  Sparkles,
+  Palette,
+  Brain,
+  Users,
+  MapPin,
+  Heart,
+  Coffee,
+  Smile,
+  Building,
 } from 'lucide-react';
 
 interface AdvancedSettingsPanelProps {
-  onWebsiteAnalysis?: (url: string) => Promise<any>;
   onCompetitorAnalysis?: (competitorUrl: string) => Promise<any>;
   onSettingsChange?: (settings: any) => void;
   isAnalyzing?: boolean;
-  websiteAnalysisResult?: any;
   competitorAnalysisResult?: any;
-  primaryWebsiteUrl?: string;
   competitorUrl?: string;
+  // New props to reflect form updates
+  currentTone?: string;
+  currentLanguagePreference?: string;
+  currentFormalityLevel?: string;
+  currentContentPurpose?: string;
+  currentAdditionalContext?: string;
 }
 
 export function AdvancedSettingsPanel({
-  onWebsiteAnalysis,
   onCompetitorAnalysis,
   onSettingsChange,
   isAnalyzing = false,
-  websiteAnalysisResult,
   competitorAnalysisResult,
-  primaryWebsiteUrl,
   competitorUrl,
+  currentTone,
+  currentLanguagePreference,
+  currentFormalityLevel,
+  currentContentPurpose,
+  currentAdditionalContext,
 }: AdvancedSettingsPanelProps) {
-  const [websiteUrl, setWebsiteUrl] = useState(primaryWebsiteUrl || '');
   const [competitorUrlState, setCompetitorUrlState] = useState(competitorUrl || '');
+  const [analysisProgress, setAnalysisProgress] = useState(0);
+  const [analysisStage, setAnalysisStage] = useState('');
+  const [analysisErrors, setAnalysisErrors] = useState<string[]>([]);
 
-  // Update URLs when props change
-  useEffect(() => {
-    if (primaryWebsiteUrl) {
-      setWebsiteUrl(primaryWebsiteUrl);
-    }
-  }, [primaryWebsiteUrl]);
+  // Enhanced analysis settings aligned with form updates
+  const [analysisSettings, setAnalysisSettings] = useState({
+    // Content Personalization Analysis
+    toneBasedAnalysis: true,
+    culturalContextAnalysis: true,
+    languageAdaptationAnalysis: true,
 
+    // Advanced Competitor Intelligence
+    toneMatchingAnalysis: true,
+    contentGapAnalysis: true,
+    culturalCompetitorAnalysis: false,
+
+    // Market & Cultural Intelligence
+    regionalLanguageAnalysis: false,
+    formalityLevelAnalysis: true,
+    contentPurposeAnalysis: true,
+
+    // Technical SEO Analysis
+    keywordDensityAnalysis: false,
+    contentStructureAnalysis: false,
+    backlinkAnalysis: false,
+  });
+
+  // Update competitor URL when prop changes
   useEffect(() => {
     if (competitorUrl) {
       setCompetitorUrlState(competitorUrl);
     }
   }, [competitorUrl]);
-  const [analysisProgress, setAnalysisProgress] = useState(0);
-  const [analysisStage, setAnalysisStage] = useState('');
-  const [analysisErrors, setAnalysisErrors] = useState<string[]>([]);
-  const [enhancedFeatures, setEnhancedFeatures] = useState({
-    enableCompetitorAnalysis: true,
-    enableWebsiteCrawling: false,
-    enableGapAnalysis: true,
-    enablePerformanceTracking: false,
-    enableLocalSeoFocus: true,
-    enableSeasonalContent: true,
-  });
 
-  const handleWebsiteAnalysis = async () => {
-    if (!websiteUrl || !onWebsiteAnalysis) return;
-
-    setAnalysisErrors([]);
-    setAnalysisProgress(0);
-    setAnalysisStage('Initiating website analysis...');
-
-    let progressInterval: NodeJS.Timeout | null = null;
-
-    try {
-      // Simulate progress updates
-      const progressStages = [
-        { progress: 10, stage: 'Connecting to website...' },
-        { progress: 25, stage: 'Crawling pages and content...' },
-        { progress: 40, stage: 'Analyzing topics and keywords...' },
-        { progress: 55, stage: 'Identifying content gaps...' },
-        { progress: 70, stage: 'Evaluating SEO performance...' },
-        { progress: 85, stage: 'Generating recommendations...' },
-        { progress: 100, stage: 'Analysis complete!' }
-      ];
-
-      let currentStageIndex = 0;
-      progressInterval = setInterval(() => {
-        if (currentStageIndex < progressStages.length) {
-          const stage = progressStages[currentStageIndex];
-          setAnalysisProgress(stage.progress);
-          setAnalysisStage(stage.stage);
-          currentStageIndex++;
-        } else if (progressInterval) {
-          clearInterval(progressInterval);
-          progressInterval = null;
-        }
-      }, 800);
-
-      const result = await onWebsiteAnalysis(websiteUrl);
-      if (progressInterval) {
-        clearInterval(progressInterval);
-        progressInterval = null;
-      }
-      setAnalysisProgress(100);
-      setAnalysisStage('Website analysis completed successfully!');
-
-      if (onSettingsChange) {
-        onSettingsChange({
-          websiteAnalysis: result,
-          enhancedFeatures,
-        });
-      }
-
-    } catch (error) {
-      if (progressInterval) {
-        clearInterval(progressInterval);
-        progressInterval = null;
-      }
-      setAnalysisProgress(0);
-      setAnalysisStage('');
-      const errorMessage = error instanceof Error ? error.message : 'Failed to analyze website';
-      setAnalysisErrors([errorMessage]);
-    }
-  };
-
+  
   const handleCompetitorAnalysis = async () => {
     if (!competitorUrlState || !onCompetitorAnalysis) return;
 
@@ -144,14 +110,27 @@ export function AdvancedSettingsPanel({
     setAnalysisStage('Analyzing competitor website...');
 
     try {
+      // Enhanced analysis request with form settings
+      const analysisRequest = {
+        competitorUrl: competitorUrlState,
+        analysisSettings,
+        currentFormSettings: {
+          tone: currentTone,
+          languagePreference: currentLanguagePreference,
+          formalityLevel: currentFormalityLevel,
+          contentPurpose: currentContentPurpose,
+          additionalContext: currentAdditionalContext,
+        }
+      };
+
       const result = await onCompetitorAnalysis(competitorUrlState);
       setAnalysisProgress(100);
-      setAnalysisStage('Competitor analysis completed!');
+      setAnalysisStage('Advanced competitor analysis completed!');
 
       if (onSettingsChange) {
         onSettingsChange({
           competitorAnalysis: result,
-          enhancedFeatures,
+          analysisSettings,
         });
       }
 
@@ -163,37 +142,82 @@ export function AdvancedSettingsPanel({
     }
   };
 
-  const handleFeatureToggle = (feature: string, enabled: boolean) => {
-    const newFeatures = { ...enhancedFeatures, [feature]: enabled };
-    setEnhancedFeatures(newFeatures);
+  const handleAnalysisToggle = (setting: string, enabled: boolean) => {
+    const newSettings = { ...analysisSettings, [setting]: enabled };
+    setAnalysisSettings(newSettings);
 
     if (onSettingsChange) {
       onSettingsChange({
-        enhancedFeatures: newFeatures,
-        websiteAnalysis: websiteAnalysisResult,
+        analysisSettings: newSettings,
         competitorAnalysis: competitorAnalysisResult,
       });
     }
   };
 
+  // Helper functions to get icons and colors for different settings
+  const getToneIcon = (tone?: string) => {
+    const toneIcons: { [key: string]: any } = {
+      professional: Building,
+      casual: Coffee,
+      friendly: Heart,
+      authoritative: Target,
+      conversational: MessageCircle,
+      humorous: Smile,
+      inspirational: Sparkles,
+    };
+    return toneIcons[tone || 'professional'] || Building;
+  };
+
+  const getLanguageIcon = (preference?: string) => {
+    const languageIcons: { [key: string]: any } = {
+      english: Globe,
+      cultural_english: MessageCircle,
+      native: Languages,
+    };
+    return languageIcons[preference || 'english'] || Globe;
+  };
+
+  const getCurrentSettingsDisplay = () => {
+    const ToneIcon = getToneIcon(currentTone);
+    const LanguageIcon = getLanguageIcon(currentLanguagePreference);
+
+    return [
+      {
+        icon: ToneIcon,
+        label: 'Tone',
+        value: currentTone || 'professional',
+        color: 'bg-blue-50 text-blue-700 border-blue-200'
+      },
+      {
+        icon: LanguageIcon,
+        label: 'Language',
+        value: currentLanguagePreference === 'cultural_english' ? 'Cultural English' :
+               currentLanguagePreference === 'native' ? 'Native Language' : 'Standard English',
+        color: 'bg-green-50 text-green-700 border-green-200'
+      },
+      {
+        icon: BookOpen,
+        label: 'Purpose',
+        value: currentContentPurpose || 'marketing',
+        color: 'bg-purple-50 text-purple-700 border-purple-200'
+      }
+    ];
+  };
+
   const getAnalysisSummary = () => {
     const summaries = [];
-
-    if (websiteAnalysisResult) {
-      summaries.push({
-        type: 'website',
-        title: 'Website Analysis',
-        status: 'completed',
-        details: `${websiteAnalysisResult.totalPages || 0} pages analyzed, ${websiteAnalysisResult.topicsFound || 0} topics identified`
-      });
-    }
 
     if (competitorAnalysisResult) {
       summaries.push({
         type: 'competitor',
-        title: 'Competitor Analysis',
+        title: 'Advanced Competitor Analysis',
         status: 'completed',
-        details: `${competitorAnalysisResult.opportunities || 0} opportunities found, ${competitorAnalysisResult.contentGaps || 0} gaps identified`
+        details: `${competitorAnalysisResult.opportunities || 0} opportunities found, ${competitorAnalysisResult.contentGaps || 0} gaps identified`,
+        features: [
+          analysisSettings.toneMatchingAnalysis && 'Tone matching',
+          analysisSettings.contentGapAnalysis && 'Content gap analysis',
+          analysisSettings.culturalCompetitorAnalysis && 'Cultural adaptation'
+        ].filter(Boolean).join(', ')
       });
     }
 
@@ -201,19 +225,52 @@ export function AdvancedSettingsPanel({
   };
 
   const analysisSummaries = getAnalysisSummary();
+  const currentSettingsDisplay = getCurrentSettingsDisplay();
 
   return (
     <Card className="w-full">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Settings className="h-5 w-5" />
+          <Brain className="h-5 w-5" />
           Advanced SEO Analysis
         </CardTitle>
         <CardDescription>
-          Enhance your topic generation with website analysis and competitor intelligence
+          Enhance your topic generation with personalized competitor intelligence and cultural analysis
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Current Settings Display */}
+        <div className="space-y-3">
+          <h4 className="font-medium flex items-center gap-2">
+            <Palette className="h-4 w-4" />
+            Your Content Settings
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {currentSettingsDisplay.map((setting, index) => {
+              const IconComponent = setting.icon;
+              return (
+                <div key={index} className={`p-3 rounded-lg border ${setting.color}`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <IconComponent className="h-4 w-4" />
+                    <span className="text-xs font-medium">{setting.label}</span>
+                  </div>
+                  <div className="text-sm font-semibold capitalize">
+                    {setting.value}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {currentAdditionalContext && (
+            <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+              <div className="text-xs font-medium text-gray-600 mb-1">Additional Context</div>
+              <div className="text-sm text-gray-800 italic">
+                "{currentAdditionalContext}"
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Analysis Summary */}
         {analysisSummaries.length > 0 && (
           <div className="space-y-3">
@@ -225,14 +282,13 @@ export function AdvancedSettingsPanel({
               {analysisSummaries.map((summary, index) => (
                 <div key={index} className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
                   <div className="flex items-center gap-2">
-                    {summary.type === 'website' ? (
-                      <Globe className="h-4 w-4 text-green-600" />
-                    ) : (
-                      <TrendingUp className="h-4 w-4 text-green-600" />
-                    )}
+                    <TrendingUp className="h-4 w-4 text-green-600" />
                     <div>
                       <div className="font-medium text-sm">{summary.title}</div>
                       <div className="text-xs text-green-700">{summary.details}</div>
+                      {summary.features && (
+                        <div className="text-xs text-green-600 mt-1">Features: {summary.features}</div>
+                      )}
                     </div>
                   </div>
                   <Badge variant="secondary" className="text-xs">
@@ -244,60 +300,176 @@ export function AdvancedSettingsPanel({
           </div>
         )}
 
-        {/* Website Analysis */}
-        <div className="space-y-3">
+        {/* Content Personalization Analysis */}
+        <div className="space-y-4">
           <div className="flex items-center gap-2">
-            <Globe className="h-4 w-4" />
-            <Label className="font-medium">Your Website Analysis</Label>
+            <Sparkles className="h-4 w-4 text-purple-600" />
+            <Label className="font-medium">Content Personalization Analysis</Label>
           </div>
-          <div className="space-y-2">
-            <div className="relative">
-              <Input
-                placeholder="https://yourwebsite.com"
-                value={websiteUrl}
-                onChange={(e) => setWebsiteUrl(e.target.value)}
-                disabled={true} // Always disabled - read-only from security settings
-                className="bg-gray-50 text-gray-700 border-gray-300"
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="flex items-center space-x-3 p-3 border rounded-lg">
+              <Switch
+                id="tone-based-analysis"
+                checked={analysisSettings.toneBasedAnalysis}
+                onCheckedChange={(checked) => handleAnalysisToggle('toneBasedAnalysis', checked)}
               />
-              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                <Settings className="h-4 w-4 text-gray-400" />
+              <div className="flex-1">
+                <Label htmlFor="tone-based-analysis" className="text-sm font-medium">
+                  Tone-Based Analysis
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Analyze competitor content matching your tone
+                </p>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Your website URL is configured in Settings → Security → Website Configuration
-            </p>
-            <div className="flex gap-2">
-              <Button
-                onClick={handleWebsiteAnalysis}
-                disabled={!websiteUrl || isAnalyzing}
-                variant="outline"
-                size="sm"
-              >
-                {isAnalyzing && analysisStage.includes('website') ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Search className="h-4 w-4 mr-2" />
-                )}
-                Analyze Your Website
-              </Button>
-              {websiteUrl && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => window.open(websiteUrl, '_blank')}
-                >
-                  <ExternalLink className="h-4 w-4" />
-                </Button>
-              )}
+            <div className="flex items-center space-x-3 p-3 border rounded-lg">
+              <Switch
+                id="cultural-context-analysis"
+                checked={analysisSettings.culturalContextAnalysis}
+                onCheckedChange={(checked) => handleAnalysisToggle('culturalContextAnalysis', checked)}
+              />
+              <div className="flex-1">
+                <Label htmlFor="cultural-context-analysis" className="text-sm font-medium">
+                  Cultural Context
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Cultural adaptation and localization analysis
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-3 p-3 border rounded-lg">
+              <Switch
+                id="language-adaptation-analysis"
+                checked={analysisSettings.languageAdaptationAnalysis}
+                onCheckedChange={(checked) => handleAnalysisToggle('languageAdaptationAnalysis', checked)}
+              />
+              <div className="flex-1">
+                <Label htmlFor="language-adaptation-analysis" className="text-sm font-medium">
+                  Language Adaptation
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Language preference based content analysis
+                </p>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Competitor Analysis */}
-        <div className="space-y-3">
+        {/* Advanced Competitor Intelligence */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4 text-blue-600" />
+            <Label className="font-medium">Advanced Competitor Intelligence</Label>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="flex items-center space-x-3 p-3 border rounded-lg">
+              <Switch
+                id="tone-matching-analysis"
+                checked={analysisSettings.toneMatchingAnalysis}
+                onCheckedChange={(checked) => handleAnalysisToggle('toneMatchingAnalysis', checked)}
+              />
+              <div className="flex-1">
+                <Label htmlFor="tone-matching-analysis" className="text-sm font-medium">
+                  Tone Matching
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Find competitors with similar content tone
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-3 p-3 border rounded-lg">
+              <Switch
+                id="content-gap-analysis"
+                checked={analysisSettings.contentGapAnalysis}
+                onCheckedChange={(checked) => handleAnalysisToggle('contentGapAnalysis', checked)}
+              />
+              <div className="flex-1">
+                <Label htmlFor="content-gap-analysis" className="text-sm font-medium">
+                  Content Gap Analysis
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Identify missing content opportunities
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-3 p-3 border rounded-lg">
+              <Switch
+                id="cultural-competitor-analysis"
+                checked={analysisSettings.culturalCompetitorAnalysis}
+                onCheckedChange={(checked) => handleAnalysisToggle('culturalCompetitorAnalysis', checked)}
+              />
+              <div className="flex-1">
+                <Label htmlFor="cultural-competitor-analysis" className="text-sm font-medium">
+                  Cultural Intelligence
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Cultural competitor strategies analysis
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Market & Cultural Intelligence */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Globe className="h-4 w-4 text-green-600" />
+            <Label className="font-medium">Market & Cultural Intelligence</Label>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="flex items-center space-x-3 p-3 border rounded-lg">
+              <Switch
+                id="regional-language-analysis"
+                checked={analysisSettings.regionalLanguageAnalysis}
+                onCheckedChange={(checked) => handleAnalysisToggle('regionalLanguageAnalysis', checked)}
+              />
+              <div className="flex-1">
+                <Label htmlFor="regional-language-analysis" className="text-sm font-medium">
+                  Regional Language
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Regional language trends analysis
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-3 p-3 border rounded-lg">
+              <Switch
+                id="formality-level-analysis"
+                checked={analysisSettings.formalityLevelAnalysis}
+                onCheckedChange={(checked) => handleAnalysisToggle('formalityLevelAnalysis', checked)}
+              />
+              <div className="flex-1">
+                <Label htmlFor="formality-level-analysis" className="text-sm font-medium">
+                  Formality Analysis
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Formality level in competitor content
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-3 p-3 border rounded-lg">
+              <Switch
+                id="content-purpose-analysis"
+                checked={analysisSettings.contentPurposeAnalysis}
+                onCheckedChange={(checked) => handleAnalysisToggle('contentPurposeAnalysis', checked)}
+              />
+              <div className="flex-1">
+                <Label htmlFor="content-purpose-analysis" className="text-sm font-medium">
+                  Content Purpose
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Purpose-based competitor analysis
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Competitor Analysis Section */}
+        <div className="space-y-3 border-t pt-6">
           <div className="flex items-center gap-2">
             <TrendingUp className="h-4 w-4" />
-            <Label className="font-medium">Competitor Analysis</Label>
+            <Label className="font-medium">Competitor URL Analysis</Label>
           </div>
           <div className="space-y-2">
             <Input
@@ -321,7 +493,7 @@ export function AdvancedSettingsPanel({
                 ) : (
                   <BarChart3 className="h-4 w-4 mr-2" />
                 )}
-                Analyze Competitor
+                Run Advanced Analysis
               </Button>
               {competitorUrlState && (
                 <Button
@@ -332,76 +504,6 @@ export function AdvancedSettingsPanel({
                   <ExternalLink className="h-4 w-4" />
                 </Button>
               )}
-            </div>
-          </div>
-        </div>
-
-        {/* Enhanced Features */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <Zap className="h-4 w-4" />
-            <Label className="font-medium">Enhanced Features</Label>
-          </div>
-          <div className="space-y-3">
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="competitor-analysis"
-                checked={enhancedFeatures.enableCompetitorAnalysis}
-                onCheckedChange={(checked) => handleFeatureToggle('enableCompetitorAnalysis', checked as boolean)}
-              />
-              <Label htmlFor="competitor-analysis" className="text-sm">
-                Competitor Analysis Integration
-              </Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="website-crawling"
-                checked={enhancedFeatures.enableWebsiteCrawling}
-                onCheckedChange={(checked) => handleFeatureToggle('enableWebsiteCrawling', checked as boolean)}
-              />
-              <Label htmlFor="website-crawling" className="text-sm">
-                Website Content Crawling
-              </Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="gap-analysis"
-                checked={enhancedFeatures.enableGapAnalysis}
-                onCheckedChange={(checked) => handleFeatureToggle('enableGapAnalysis', checked as boolean)}
-              />
-              <Label htmlFor="gap-analysis" className="text-sm">
-                Content Gap Analysis
-              </Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="performance-tracking"
-                checked={enhancedFeatures.enablePerformanceTracking}
-                onCheckedChange={(checked) => handleFeatureToggle('enablePerformanceTracking', checked as boolean)}
-              />
-              <Label htmlFor="performance-tracking" className="text-sm">
-                Performance Tracking
-              </Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="local-seo-focus"
-                checked={enhancedFeatures.enableLocalSeoFocus}
-                onCheckedChange={(checked) => handleFeatureToggle('enableLocalSeoFocus', checked as boolean)}
-              />
-              <Label htmlFor="local-seo-focus" className="text-sm">
-                Local SEO Focus
-              </Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="seasonal-content"
-                checked={enhancedFeatures.enableSeasonalContent}
-                onCheckedChange={(checked) => handleFeatureToggle('enableSeasonalContent', checked as boolean)}
-              />
-              <Label htmlFor="seasonal-content" className="text-sm">
-                Seasonal Content Suggestions
-              </Label>
             </div>
           </div>
         </div>
@@ -432,11 +534,11 @@ export function AdvancedSettingsPanel({
           </div>
         )}
 
-        {/* Info Alert */}
+        {/* Enhanced Info Alert */}
         <Alert>
           <Info className="h-4 w-4" />
           <AlertDescription>
-            Advanced analysis provides deeper insights by analyzing your existing content and competitor strategies. This helps identify content gaps and opportunities for better topic generation.
+            Advanced analysis now incorporates your content settings (tone, language, cultural preferences) to provide personalized competitor intelligence and content gap analysis tailored to your specific requirements.
           </AlertDescription>
         </Alert>
       </CardContent>

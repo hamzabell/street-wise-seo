@@ -4,7 +4,7 @@
 
 import { z } from 'zod';
 import { getLemonfoxClient, type CulturalGenerationRequest } from './lemonfox-client';
-import { crawlWebsite } from './website-crawler';
+import { crawlWebsite, type WebsiteAnalysisResult } from './website-crawler';
 import { analyzeContent } from './content-analyzer';
 import { getIndustryTemplate, generateIndustryPrompt, getSeasonalSuggestions, getLocalServicePatterns, getCurrentSeason } from './industry-templates';
 import { detectLocationCharacteristics, getLocationAwareSeasonalTopics } from './location-awareness';
@@ -34,7 +34,7 @@ export const TopicGenerationRequestSchema = z.object({
   targetAudience: z.string().min(2, 'Target audience is required'),
   location: z.string().optional(),
   websiteUrl: z.string().url('Invalid website URL').optional().or(z.literal('')),
-  competitorUrl: z.string().url('Invalid competitor URL').optional().or(z.literal('')),
+  competitorUrls: z.array(z.string().url('Invalid competitor URL').or(z.literal(''))).optional(),
   forceRecrawl: z.boolean().default(false), // Force re-crawl even if recently crawled
   supabaseUserId: z.string().optional(), // User ID for caching checks
   enablePersonalization: z.boolean().default(true), // Enable performance-based personalization
@@ -46,6 +46,7 @@ export const TopicGenerationRequestSchema = z.object({
   predictionAccuracy: z.enum(['conservative', 'balanced', 'aggressive']).default('balanced'),
   includeSeasonalForecast: z.boolean().default(false),
   // Cultural and language options
+  tone: z.string().min(1, 'Tone selection is required').default('professional'),
   languagePreference: z.enum(['english', 'native', 'cultural_english']).default('english'),
   formalityLevel: z.enum(['formal', 'professional', 'casual', 'slang_heavy']).default('professional'),
   contentPurpose: z.enum(['marketing', 'educational', 'conversational', 'technical']).default('marketing'),
@@ -61,7 +62,7 @@ export interface GeneratedTopic {
   suggestedTags: string[];
   relevanceScore?: number;
   reasoning?: string;
-  source?: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity' | 'market_opportunity' | 'competitive_gap' | 'personalized';
+  source?: 'ai' | 'website_gap' | 'competitor_advantage' | 'content_opportunity' | 'market_opportunity' | 'competitive_gap' | 'strategic_positioning' | 'personalized';
   relatedContent?: string;
   // Mobile optimization fields
   mobileFriendly?: boolean;
@@ -103,6 +104,11 @@ export interface TopicGenerationResult {
     averagePredictedPerformance?: number;
     marketAnalysisEnabled: boolean;
     predictiveRecommendationsEnabled: boolean;
+    // Cultural and personalization settings
+    tone?: string;
+    languagePreference?: string;
+    formalityLevel?: string;
+    contentPurpose?: string;
   };
   websiteAnalysis?: any;
   contentAnalysis?: any;
@@ -153,6 +159,7 @@ export class TopicGenerator {
       let contentAnalysis = null;
       let competitorAnalysis = null;
       let competitorIntelligence = null;
+      const competitorAnalyses: WebsiteAnalysisResult[] = [];
 
       // If website URL provided, check if recently crawled or crawl and analyze it
       if (validated.websiteUrl) {
@@ -185,7 +192,11 @@ export class TopicGenerator {
                   totalWordCount: cachedAnalysis.totalWordCount || 0,
                   totalImages: cachedAnalysis.totalImages || 0,
                   topics: JSON.parse(cachedAnalysis.topics || '[]'),
-                  keywords: JSON.parse(cachedAnalysis.keywords || '[]'),
+                  keywords: Array.isArray(JSON.parse(cachedAnalysis.keywords || '[]'))
+                    ? JSON.parse(cachedAnalysis.keywords || '[]').map((k: any) =>
+                        typeof k === 'string' ? { keyword: k, frequency: 1, density: 0.1 } : k
+                      )
+                    : [],
                   internalLinkingScore: cachedAnalysis.internalLinkingScore || 0,
                   technicalIssues: JSON.parse(cachedAnalysis.technicalIssues || '[]'),
                   crawledAt: cachedAnalysis.crawledAt.toISOString(),
@@ -218,36 +229,52 @@ export class TopicGenerator {
             });
           }
 
-          // If competitor URL provided, crawl competitor as well (competitors are always crawled fresh)
-          if (validated.competitorUrl) {
-            console.log('🏁 [TOPIC GENERATOR] Crawling competitor:', validated.competitorUrl);
-            try {
-              competitorAnalysis = await crawlWebsite({
-                url: validated.competitorUrl,
-                maxPages: 3, // Smaller limit for competitor
-                includeExternalLinks: false,
-                crawlDelay: 1000
-              });
-              console.log('✅ [TOPIC GENERATOR] Competitor crawled successfully:', {
-                domain: competitorAnalysis.domain,
-                pagesCrawled: competitorAnalysis.crawledPages.length
-              });
-            } catch (error) {
-              console.error('❌ [TOPIC GENERATOR] Competitor crawl failed:', error);
-              // Continue without competitor analysis
+          // If competitor URLs provided, crawl competitors as well (competitors are always crawled fresh)
+          if (validated.competitorUrls && validated.competitorUrls.length > 0) {
+            console.log(`🏁 [TOPIC GENERATOR] Crawling ${validated.competitorUrls.length} competitors...`);
+
+            for (const competitorUrl of validated.competitorUrls) {
+              if (competitorUrl && competitorUrl.trim() !== '') {
+                try {
+                  console.log('🏁 [TOPIC GENERATOR] Crawling competitor:', competitorUrl);
+                  const analysis = await crawlWebsite({
+                    url: competitorUrl,
+                    maxPages: 3, // Smaller limit for each competitor
+                    includeExternalLinks: false,
+                    crawlDelay: 1000
+                  });
+                  competitorAnalyses.push(analysis);
+                  console.log('✅ [TOPIC GENERATOR] Competitor crawled successfully:', {
+                    domain: analysis.domain,
+                    pagesCrawled: analysis.crawledPages.length
+                  });
+                } catch (error) {
+                  console.error('❌ [TOPIC GENERATOR] Competitor crawl failed:', competitorUrl, error);
+                  // Continue with other competitors
+                }
+              }
             }
+
+            // Use the first competitor analysis for backward compatibility
+            competitorAnalysis = competitorAnalyses.length > 0 ? competitorAnalyses[0] : null;
+            console.log(`✅ [TOPIC GENERATOR] Successfully crawled ${competitorAnalyses.length} out of ${validated.competitorUrls.length} competitors`);
           }
 
           // Generate advanced competitor intelligence if we have competitor data
-          if (competitorAnalysis && validated.enablePersonalization) {
+          if (competitorAnalyses.length > 0) {
             try {
               console.log('🕵️ [TOPIC GENERATOR] Analyzing competitor intelligence...');
               competitorIntelligence = await performCompetitorAnalysis(
-                [competitorAnalysis],
+                competitorAnalyses,
                 industryName,
-                validated.location
+                validated.location,
+                websiteAnalysis || undefined
               );
-              console.log('✅ [TOPIC GENERATOR] Competitor intelligence generated');
+              console.log('✅ [TOPIC GENERATOR] Enhanced competitor intelligence generated:', {
+                competitorsAnalyzed: competitorIntelligence.primaryCompetitors.length,
+                criticalThreats: competitorIntelligence.competitorAdvantages?.criticalThreats.length || 0,
+                addressableAdvantages: competitorIntelligence.competitorAdvantages?.addressableAdvantages.length || 0
+              });
             } catch (error) {
               console.warn('⚠️ [TOPIC GENERATOR] Competitor intelligence analysis failed:', error);
             }
@@ -256,11 +283,12 @@ export class TopicGenerator {
           // Analyze content (only if we have fresh data or sufficient cached data)
           if (websiteAnalysis && (websiteAnalysis.crawledPages.length > 0 || websiteAnalysis.topics.length > 0)) {
             console.log('🧠 [TOPIC GENERATOR] Analyzing content...');
-            contentAnalysis = analyzeContent(websiteAnalysis, competitorAnalysis || undefined);
+            contentAnalysis = analyzeContent(websiteAnalysis, competitorAnalyses.length > 0 ? competitorAnalyses[0] : undefined);
             console.log('✅ [TOPIC GENERATOR] Content analysis completed:', {
               contentGaps: contentAnalysis.contentGaps.length,
               contentClusters: contentAnalysis.contentClusters.length,
-              seoInsights: contentAnalysis.seoInsights.length
+              seoInsights: contentAnalysis.seoInsights.length,
+              competitorsAnalyzed: competitorAnalyses.length
             });
           } else {
             console.log('⚠️ [TOPIC GENERATOR] Insufficient data for content analysis, proceeding without it');
@@ -295,9 +323,13 @@ export class TopicGenerator {
         contentAnalysis,
         validated.industryId,
         seasonalTopics,
-        competitorAnalysis ? [competitorAnalysis] : undefined,
+        competitorAnalyses.length > 0 ? competitorAnalyses : undefined,
         competitorIntelligence || undefined,
-        culturalRequest
+        culturalRequest,
+        {
+          tone: validated.tone,
+          competitorUrls: validated.competitorUrls?.filter(url => url && url.trim().length > 0)
+        }
       );
 
       // Analyze metadata for each topic
@@ -430,8 +462,17 @@ export class TopicGenerator {
         marketInsights
       );
 
+      // Apply competitor counter-topic strategy if competitor intelligence available
+      const competitorAwareTopics = await this.applyCompetitorCounterStrategy(
+        enhancedTopics,
+        competitorIntelligence,
+        industryName,
+        validated.targetAudience,
+        validated.location
+      );
+
       // Limit to max topics if specified
-      const finalTopics = validated.maxTopics ? enhancedTopics.slice(0, validated.maxTopics) : enhancedTopics;
+      const finalTopics = validated.maxTopics ? competitorAwareTopics.slice(0, validated.maxTopics) : competitorAwareTopics;
 
       // Generate metadata
       const metadata = this.generateMetadata(validated, finalTopics, personalizationInsights);
@@ -593,6 +634,11 @@ export class TopicGenerator {
       averagePredictedPerformance: request.enablePersonalization ? averagePredictedPerformance : undefined,
       marketAnalysisEnabled: request.enableMarketAnalysis,
       predictiveRecommendationsEnabled: request.enablePredictiveRecommendations,
+      // Add cultural and personalization settings for advanced panel
+      tone: request.tone,
+      languagePreference: request.languagePreference,
+      formalityLevel: request.formalityLevel,
+      contentPurpose: request.contentPurpose,
     };
   }
 
@@ -1281,6 +1327,132 @@ export class TopicGenerator {
     if (month >= 5 && month <= 7) return 'summer';
     if (month >= 8 && month <= 10) return 'fall';
     return 'winter';
+  }
+
+  private async applyCompetitorCounterStrategy(
+    topics: GeneratedTopic[],
+    competitorIntelligence: any,
+    businessType: string,
+    targetAudience: string,
+    location?: string
+  ): Promise<GeneratedTopic[]> {
+    if (!competitorIntelligence || !competitorIntelligence.competitorAdvantages) {
+      console.log('ℹ️ [TOPIC GENERATOR] No competitor intelligence available for counter-strategy');
+      return topics;
+    }
+
+    console.log('🎯 [TOPIC GENERATOR] Applying competitor counter-strategy...');
+
+    const enhancedTopics = [...topics];
+    const { competitorAdvantages } = competitorIntelligence;
+    const { competitorIntelligenceAnalyzer } = await import('./competitor-intelligence');
+
+    // Generate counter-topics for critical threats and addressable advantages
+    const advantagesToCounter = [
+      ...competitorAdvantages.criticalThreats.slice(0, 3),
+      ...competitorAdvantages.addressableAdvantages.slice(0, 5)
+    ];
+
+    if (advantagesToCounter.length > 0) {
+      const businessContext = {
+        businessType,
+        targetAudience,
+        location,
+        uniqueValueProps: ['Quality service', 'Local expertise', 'Customer satisfaction'] // These would come from business analysis
+      };
+
+      try {
+        const counterTopics = competitorIntelligenceAnalyzer.generateCounterTopics(
+          advantagesToCounter,
+          businessContext
+        );
+
+        console.log(`🔄 [TOPIC GENERATOR] Generated ${counterTopics.length} counter-topics`);
+
+        // Convert counter-topics to GeneratedTopic format
+        const generatedCounterTopics: GeneratedTopic[] = counterTopics.map((counterTopic: any, index: number) => ({
+          topic: counterTopic.topic,
+          difficulty: 'medium' as const,
+          searchVolume: 800 + (index * 100), // Estimated search volume
+          competition: 'medium' as const,
+          suggestedTags: [counterTopic.type, 'competitive positioning', businessType.toLowerCase()],
+          reasoning: counterTopic.reasoning,
+          source: 'competitive_gap' as const,
+          mobileFriendly: true,
+          voiceSearchFriendly: counterTopic.searchIntent === 'informational',
+          localIntent: location ? 'high' as const : 'medium' as const,
+          actionOriented: counterTopic.searchIntent === 'transactional',
+          recommendedLength: counterTopic.type === 'comparison' ? 'long' as const : 'medium' as const,
+          relevanceScore: 85 + (Math.random() * 10), // High relevance for counter-topics
+          urgencyLevel: counterTopic.targetAdvantage.impactLevel === 'critical' ? 'high' as const : 'medium' as const,
+          implementationTime: '1 hour' as const,
+          contentChecklist: [
+            'Address competitor advantage directly',
+            'Highlight alternative value proposition',
+            'Provide clear comparison points',
+            'Include unique business differentiators'
+          ],
+          titleVariations: [
+            counterTopic.topic,
+            `${counterTopic.topic} [Comparison Guide]`,
+            `Why Choose Our ${businessType} Over Competitors`
+          ].slice(0, 2)
+        }));
+
+        // Add counter-topics to the beginning of the list for higher priority
+        enhancedTopics.unshift(...generatedCounterTopics);
+
+        console.log(`✅ [TOPIC GENERATOR] Added ${generatedCounterTopics.length} strategic counter-topics`);
+      } catch (error) {
+        console.warn('⚠️ [TOPIC GENERATOR] Failed to generate counter-topics:', error);
+      }
+    }
+
+    // Enhance existing topics with competitor awareness
+    const topicsWithCompetitorContext = enhancedTopics.map(topic => {
+      const topicLower = topic.topic.toLowerCase();
+      let enhancedReasoning = topic.reasoning || '';
+      let enhancedSource = topic.source;
+
+      // Check if topic relates to competitor threats
+      const relatedThreat = competitorAdvantages.criticalThreats.find((threat: any) =>
+        threat.advantage.toLowerCase().includes(topicLower) ||
+        topicLower.includes(threat.advantage.toLowerCase())
+      );
+
+      if (relatedThreat) {
+        enhancedReasoning += ` [Addresses competitor: ${relatedThreat.advantage}]`;
+        enhancedSource = 'competitive_gap';
+        topic.relevanceScore = Math.min(100, (topic.relevanceScore || 50) + 20);
+      }
+
+      // Check if topic relates to comparison opportunities
+      const comparisonOpportunity = competitorAdvantages.comparisonOpportunities.find((opp: any) =>
+        opp.advantage.toLowerCase().includes(topicLower) ||
+        topicLower.includes(opp.advantage.toLowerCase())
+      );
+
+      if (comparisonOpportunity) {
+        enhancedReasoning += ` [Comparison opportunity: ${comparisonOpportunity.advantage}]`;
+        enhancedSource = 'competitor_advantage';
+        topic.relevanceScore = Math.min(100, (topic.relevanceScore || 50) + 15);
+      }
+
+      return {
+        ...topic,
+        reasoning: enhancedReasoning,
+        source: enhancedSource
+      };
+    });
+
+    console.log(`🎯 [TOPIC GENERATOR] Competitor counter-strategy applied to ${topicsWithCompetitorContext.length} topics`);
+
+    return topicsWithCompetitorContext.sort((a, b) => {
+      // Sort by relevance score and competitor awareness
+      const scoreA = (a.relevanceScore || 0) + (a.source?.includes('competitor') ? 10 : 0);
+      const scoreB = (b.relevanceScore || 0) + (b.source?.includes('competitor') ? 10 : 0);
+      return scoreB - scoreA;
+    });
   }
 
   private applyMarketIntelligence(

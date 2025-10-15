@@ -13,6 +13,10 @@ export interface BusinessService {
   features: string[];
   urgencyLevel: 'emergency' | 'urgent' | 'routine' | 'consultation';
   localService: boolean;
+  specialization?: string;
+  categories: string[];
+  qualityIndicators?: string[];
+  availability?: string;
 }
 
 export interface BusinessProduct {
@@ -33,7 +37,7 @@ export interface BusinessOfferings {
   valuePropositions: string[];
   targetAudiences: string[];
   serviceAreas: string[];
-  emergencyServices: string[];
+  emergencyServices: BusinessService[];
   uniqueSellingPoints: string[];
 }
 
@@ -266,7 +270,11 @@ export class ServiceExtractor {
       targetAudience,
       features,
       urgencyLevel,
-      localService
+      localService,
+      specialization: this.determineSpecialization(serviceText, allText),
+      categories: [category, 'general'], // Include category and default
+      qualityIndicators: this.extractQualityIndicators(serviceText + ' ' + description),
+      availability: this.extractAvailability(serviceText + ' ' + description)
     };
   }
 
@@ -625,10 +633,9 @@ export class ServiceExtractor {
     return Array.from(areas).slice(0, 5);
   }
 
-  private extractEmergencyServices(services: BusinessService[]): string[] {
+  private extractEmergencyServices(services: BusinessService[]): BusinessService[] {
     return services
-      .filter(service => service.urgencyLevel === 'emergency')
-      .map(service => service.name);
+      .filter(service => service.urgencyLevel === 'emergency');
   }
 
   private extractUniqueSellingPoints(websiteAnalysis: WebsiteAnalysisResult): string[] {
@@ -683,6 +690,53 @@ export class ServiceExtractor {
            name.length < 50 &&
            !/^(click|here|more|info|contact|about|home)$/i.test(name) &&
            !name.match(/^\d+$/);
+  }
+
+  private determineSpecialization(serviceText: string, allText: string): string | undefined {
+    const specializationIndicators = [
+      'specialized', 'specialist', 'expert', 'certified', 'licensed',
+      'professional', 'master', 'advanced', 'expertise', 'niche'
+    ];
+
+    const combinedText = (serviceText + ' ' + allText).toLowerCase();
+
+    if (specializationIndicators.some(indicator => combinedText.includes(indicator))) {
+      return 'specialized';
+    }
+
+    return undefined;
+  }
+
+  private extractQualityIndicators(text: string): string[] {
+    const qualityTerms = [
+      'certified', 'licensed', 'insured', 'guaranteed', 'warranty',
+      'quality', 'professional', 'expert', 'trained', 'experienced',
+      'award winning', 'best rated', 'top rated', '5 star', 'five star',
+      'approved', 'accredited', 'verified', 'trusted'
+    ];
+
+    const lowerText = text.toLowerCase();
+    const foundIndicators = qualityTerms.filter(term => lowerText.includes(term));
+
+    return [...new Set(foundIndicators)];
+  }
+
+  private extractAvailability(text: string): string | undefined {
+    const availabilityPatterns = [
+      '24/7', '24 hours', '24 hour', 'around the clock',
+      'same day', 'next day', 'emergency', 'after hours',
+      'weekends', 'holidays', 'on call'
+    ];
+
+    const lowerText = text.toLowerCase();
+
+    for (const pattern of availabilityPatterns) {
+      if (lowerText.includes(pattern)) {
+        return pattern;
+      }
+    }
+
+    return undefined;
   }
 
   private capitalizeWords(str: string): string {

@@ -16,7 +16,7 @@ const GenerateTopicsRequestSchema = z.object({
   industryId: z.string().min(1, 'Industry selection is required'),
   targetAudience: z.string().min(2, 'Target audience is required'),
   location: z.string().optional(),
-  competitorUrl: z.string().url('Invalid competitor URL').optional().or(z.literal('')),
+  competitorUrls: z.array(z.string().url('Invalid competitor URL').or(z.literal(''))).optional(),
   tone: z.string().min(1, 'Tone selection is required').default('professional'),
   additionalContext: z.string().optional(),
   websiteUrl: z.string().url('Invalid website URL').optional().or(z.literal('')),
@@ -186,7 +186,7 @@ export async function POST(request: NextRequest) {
       console.log('🚀 [API] Calling generateSEOTopics with request:', {
         topic: requestData.topic,
         websiteUrl: requestData.websiteUrl,
-        competitorUrl: requestData.competitorUrl,
+        competitorUrls: requestData.competitorUrls,
         forceRecrawl: requestData.forceRecrawl,
         supabaseUserId: user.id
       });

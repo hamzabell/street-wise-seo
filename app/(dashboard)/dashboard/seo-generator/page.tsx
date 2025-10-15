@@ -39,6 +39,12 @@ interface TopicGenerationResult {
     totalTopics: number;
     averageDifficulty: string;
     totalEstimatedVolume: number;
+    // Cultural and personalization settings
+    tone?: string;
+    languagePreference?: string;
+    formalityLevel?: string;
+    contentPurpose?: string;
+    additionalContext?: string;
   };
 }
 
@@ -78,7 +84,6 @@ function SEOGeneratorContent() {
   const [useEnhancedView, setUseEnhancedView] = useState(true);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [advancedSettings, setAdvancedSettings] = useState({
-    websiteAnalysis: null as any,
     competitorAnalysis: null as any,
     enhancedFeatures: {
       enableCompetitorAnalysis: true,
@@ -89,14 +94,12 @@ function SEOGeneratorContent() {
       enableSeasonalContent: true,
     }
   });
-  const [primaryWebsiteUrl, setPrimaryWebsiteUrl] = useState('');
   const [currentCompetitorUrl, setCurrentCompetitorUrl] = useState('');
   const [currentDetailedLocation, setCurrentDetailedLocation] = useState<DetailedLocation | null>(null);
 
-  // Fetch usage stats and primary website URL on component mount
+  // Fetch usage stats on component mount
   useEffect(() => {
     fetchUsageStats();
-    fetchPrimaryWebsiteUrl();
   }, []);
 
   const fetchUsageStats = async () => {
@@ -126,36 +129,27 @@ function SEOGeneratorContent() {
     }
   };
 
-  const fetchPrimaryWebsiteUrl = async () => {
-    try {
-      const response = await fetch('/api/user/website');
-      if (response.ok) {
-        const data = await response.json();
-        const url = data.data?.primaryWebsiteUrl || '';
-        setPrimaryWebsiteUrl(url);
-      }
-    } catch (error) {
-      console.error('Error fetching primary website URL:', error);
-    }
-  };
-
+  
   const handleGenerateTopics = async (formData: {
     topic: string;
     businessType: string;
     industryId: string;
     targetAudience: string;
     location?: string;
-    competitorUrl?: string;
-    websiteUrl?: string;
+    competitorUrls?: string[];
     detailedLocation?: DetailedLocation;
-    forceRecrawl?: boolean;
+    tone?: string;
+    languagePreference?: string;
+    formalityLevel?: string;
+    contentPurpose?: string;
+    additionalContext?: string;
   }) => {
     setIsGenerating(true);
     setError(null);
 
-    // Store the competitor URL and detailed location for use in advanced settings
-    if (formData.competitorUrl) {
-      setCurrentCompetitorUrl(formData.competitorUrl);
+    // Store the first competitor URL and detailed location for use in advanced settings
+    if (formData.competitorUrls && formData.competitorUrls.length > 0) {
+      setCurrentCompetitorUrl(formData.competitorUrls[0]);
     }
     if (formData.detailedLocation) {
       setCurrentDetailedLocation(formData.detailedLocation);
@@ -320,29 +314,7 @@ function SEOGeneratorContent() {
     }
   };
 
-  const handleWebsiteAnalysis = async (url: string) => {
-    try {
-      const response = await fetch('/api/seo/crawl', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ url }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to analyze website');
-      }
-
-      const result = await response.json();
-      return result.data;
-    } catch (error) {
-      console.error('Website analysis error:', error);
-      throw error;
-    }
-  };
-
+  
   const handleCompetitorAnalysis = async (competitorUrl: string) => {
     try {
       const response = await fetch('/api/competitors/crawl', {
@@ -521,14 +493,17 @@ function SEOGeneratorContent() {
             {/* Advanced Settings Panel */}
             {showAdvancedSettings && (
               <AdvancedSettingsPanel
-                onWebsiteAnalysis={handleWebsiteAnalysis}
                 onCompetitorAnalysis={handleCompetitorAnalysis}
                 onSettingsChange={handleAdvancedSettingsChange}
-                websiteAnalysisResult={advancedSettings.websiteAnalysis}
                 competitorAnalysisResult={advancedSettings.competitorAnalysis}
                 isAnalyzing={isGenerating}
-                primaryWebsiteUrl={primaryWebsiteUrl}
                 competitorUrl={currentCompetitorUrl}
+                // Pass current form settings for personalized analysis
+                currentTone={currentResult?.metadata?.tone || 'professional'}
+                currentLanguagePreference={currentResult?.metadata?.languagePreference || 'english'}
+                currentFormalityLevel={currentResult?.metadata?.formalityLevel || 'professional'}
+                currentContentPurpose={currentResult?.metadata?.contentPurpose || 'marketing'}
+                currentAdditionalContext={currentResult?.metadata?.additionalContext}
               />
             )}
 

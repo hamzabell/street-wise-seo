@@ -34,7 +34,7 @@ export function JobStateProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let reconnectTimeout: NodeJS.Timeout;
     let connectionAttempts = 0;
-    const maxConnectionAttempts = 5;
+    const maxConnectionAttempts = 3; // Reduced attempts to reduce noise
 
     const connectSSE = () => {
       connectionAttempts++;
@@ -47,7 +47,7 @@ export function JobStateProvider({ children }: { children: ReactNode }) {
 
       // Stop trying after max attempts
       if (connectionAttempts > maxConnectionAttempts) {
-        console.error('❌ [JOB STATE] Max connection attempts reached, stopping SSE connection attempts');
+        console.warn('⚠️ [JOB STATE] Max connection attempts reached, SSE may not be essential for current operation');
         return;
       }
 
@@ -70,7 +70,6 @@ export function JobStateProvider({ children }: { children: ReactNode }) {
 
               case 'job_update':
                 console.log('📊 [JOB STATE] Job update received:', data.data);
-                console.log('🎯 [JOB STATE] Setting current job to:', data.data);
                 setCurrentJob(data.data);
                 break;
 
@@ -95,11 +94,15 @@ export function JobStateProvider({ children }: { children: ReactNode }) {
           console.error('❌ [JOB STATE] SSE connection error:', error);
           es.close();
 
-          // Exponential backoff for reconnection
-          const backoffDelay = Math.min(3000 * Math.pow(2, connectionAttempts - 1), 30000);
-          console.log(`🔄 [JOB STATE] Will attempt to reconnect in ${backoffDelay/1000}s`);
-
-          reconnectTimeout = setTimeout(connectSSE, backoffDelay);
+          // Only reconnect if we haven't exceeded max attempts
+          if (connectionAttempts < maxConnectionAttempts) {
+            // Shorter backoff for better UX
+            const backoffDelay = Math.min(2000 * Math.pow(2, connectionAttempts - 1), 10000);
+            console.log(`🔄 [JOB STATE] Will attempt to reconnect in ${backoffDelay/1000}s`);
+            reconnectTimeout = setTimeout(connectSSE, backoffDelay);
+          } else {
+            console.warn('⚠️ [JOB STATE] SSE connection failed - continuing without real-time updates');
+          }
         };
 
         es.onopen = () => {
@@ -108,19 +111,14 @@ export function JobStateProvider({ children }: { children: ReactNode }) {
           connectionAttempts = 0;
         };
 
-        // Set a timeout to check if connection was successful
+        // Reduced timeout for better UX
         const connectionTimeout = setTimeout(() => {
           if (es.readyState === EventSource.CONNECTING) {
-            console.warn('⚠️ [JOB STATE] SSE connection still connecting after 5 seconds');
-            // Close the connection and try again if we haven't exceeded max attempts
-            es.close();
-            if (connectionAttempts < maxConnectionAttempts) {
-              reconnectTimeout = setTimeout(connectSSE, 5000);
-            } else {
-              console.error('❌ [JOB STATE] Max connection attempts reached, stopping reconnection attempts');
-            }
+            console.warn('⚠️ [JOB STATE] SSE connection taking longer than expected');
+            // Don't automatically close - let it try to connect naturally
+            // This reduces connection churn
           }
-        }, 5000);
+        }, 3000); // Reduced from 5 seconds
 
         // Clear the timeout if the connection closes or opens successfully
         es.addEventListener('open', () => {
@@ -133,8 +131,10 @@ export function JobStateProvider({ children }: { children: ReactNode }) {
 
       } catch (error) {
         console.error('❌ [JOB STATE] Failed to create SSE connection:', error);
-        // Try again after a delay
-        reconnectTimeout = setTimeout(connectSSE, 5000);
+        // Only try again if we haven't exceeded max attempts
+        if (connectionAttempts < maxConnectionAttempts) {
+          reconnectTimeout = setTimeout(connectSSE, 3000);
+        }
       }
     };
 

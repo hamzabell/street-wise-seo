@@ -695,6 +695,16 @@ export async function createSavedTopic(data: {
   additionalContext?: string;
   websiteUrl?: string;
   websiteAnalysisContext?: string;
+  // Enhanced cultural context fields
+  languagePreference?: string;
+  formalityLevel?: string;
+  contentPurpose?: string;
+  brandVoiceAnalysis?: string;
+  businessOfferings?: string;
+  competitorIntelligence?: string;
+  culturalContext?: string;
+  marketPositioning?: string;
+  contextWeights?: string;
 }) {
   const [savedTopic] = await db
     .insert(savedTopics)

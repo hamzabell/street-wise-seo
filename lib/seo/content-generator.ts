@@ -1,6 +1,13 @@
 import { getLemonfoxClient } from './lemonfox-client';
 import { analyzeBrandVoice, type BrandAnalysisInsights } from './brand-voice-analyzer';
 import { type DetailedLocation } from './location-service';
+import {
+  synthesizeContext,
+  generateEnhancedPrompts,
+  type ContextSources,
+  type SynthesizedContext,
+  type ContextWeighting
+} from './context-synthesis';
 
 export interface ContentGenerationOptions {
   topic: string;
@@ -16,6 +23,19 @@ export interface ContentGenerationOptions {
   targetWordCount: number;
   tags?: string[];
   brandVoiceAnalysis?: BrandAnalysisInsights;
+
+  // Enhanced context sources for deeper integration
+  businessOfferings?: any; // Service/offering analysis
+  competitorIntelligence?: any; // Competitor analysis
+  culturalContext?: any; // Cultural/language context
+  marketPositioning?: any; // Market positioning analysis
+
+  // Enhanced cultural context fields
+  languagePreference?: 'english' | 'cultural_english' | 'native';
+  formalityLevel?: 'formal' | 'professional' | 'casual' | 'slang_heavy';
+  contentPurpose?: 'marketing' | 'educational' | 'conversational' | 'technical';
+  contextWeights?: any; // Context weight analysis
+  useEnhancedPrompts?: boolean; // Whether to use new context synthesis system
 }
 
 export interface GeneratedContent {
@@ -155,127 +175,170 @@ export async function generatePersonalizedContent(options: ContentGenerationOpti
     detailedLocation,
     targetWordCount,
     tags = [],
-    brandVoiceAnalysis
+    brandVoiceAnalysis,
+    businessOfferings,
+    competitorIntelligence,
+    culturalContext,
+    marketPositioning,
+    contextWeights,
+    useEnhancedPrompts = true
   } = options;
 
-  const contentTypeConfig = CONTENT_TYPE_PROMPTS[contentType];
-  const toneGuidelines = TONE_GUIDELINES[tone];
+  console.log('🚀 [CONTENT GENERATOR] Starting content generation:', {
+    topic,
+    contentType,
+    variantNumber,
+    businessType,
+    targetAudience
+  });
 
-  // Build comprehensive prompt
-  let prompt = `Generate ${contentTypeConfig.instructions} for the following topic:
-
-TOPIC: ${topic}
-CONTENT TYPE: ${contentType.replace('_', ' ').toUpperCase()}
-TONE: ${tone.toUpperCase()} (${toneGuidelines.voice})
-TARGET WORD COUNT: ${targetWordCount} words
-VARIANT NUMBER: ${variantNumber} of 3
-
-BUSINESS CONTEXT:
-- Business Type: ${businessType || 'General business'}
-- Target Audience: ${targetAudience || 'General audience'}
-${detailedLocation ? `- Location: ${detailedLocation.fullDisplay}
-${detailedLocation.searchContext ? `- Location Context: ${detailedLocation.searchContext}` : ''}
-${detailedLocation.geographicContext ? `- Cultural Context: ${detailedLocation.geographicContext}` : ''}
-${detailedLocation.localizedDescription ? `- Local Description: ${detailedLocation.localizedDescription}` : ''}` : location ? `- Location: ${location}` : ''}
-- Target Keywords: ${tags.join(', ')}
-
-TONE GUIDELINES:
-Style: ${toneGuidelines.style}
-Voice: ${toneGuidelines.voice}
-
-CONTENT STRUCTURE:
-${contentTypeConfig.structure}`;
-
-  // Add enhanced brand voice context if available
-  if (brandVoiceAnalysis) {
-    const { brandVoiceProfile, personalizationRecommendations, targetLanguageStyle } = brandVoiceAnalysis;
-    prompt += `
-
-ENHANCED BRAND VOICE CONTEXT:
-**Brand Profile:** ${targetLanguageStyle}
-**Key Brand Phrases:** ${brandVoiceProfile.keyPhrases.slice(0, 8).join(', ')}
-**Unique Terminology:** ${brandVoiceProfile.uniqueTerminology.slice(0, 5).join(', ')}
-**Branded Terms:** ${brandVoiceProfile.brandedTerms.join(', ')}
-**Core Values:** ${brandVoiceProfile.coreValues.join(', ')}
-**Communication Style:** ${brandVoiceProfile.perspective} perspective, ${brandVoiceProfile.formalityLevel} formality
-**Content Preferences:** ${brandVoiceProfile.contentStructure.usesLists ? 'Uses lists and structured content' : 'Prefers narrative content'}
-
-**CONTENT CREATION REQUIREMENTS:**
-${personalizationRecommendations.contentCreation.map(rec => `- ${rec}`).join('\n')}
-
-**BRAND CONSISTENCY REQUIREMENTS:**
-${personalizationRecommendations.brandConsistency.map(rec => `- ${rec}`).join('\n')}
-
-IMPORTANT: Write content that sounds exactly like it comes from this business. Use their terminology, match their communication style, and reflect their core values naturally throughout the content.`;
-  }
-
-  // Add legacy website analysis context for backwards compatibility
-  if (websiteAnalysisContext && !brandVoiceAnalysis) {
-    prompt += `
-
-WEBSITE CONTEXT FOR BRAND CONSISTENCY:
-- Brand Voice: ${websiteAnalysisContext.brandVoice || 'Professional and trustworthy'}
-- Key Phrases: ${websiteAnalysisContext.keyPhrases?.join(', ') || 'N/A'}
-- Services: ${websiteAnalysisContext.services?.join(', ') || 'N/A'}
-- About Company: ${websiteAnalysisContext.aboutInfo || 'N/A'}
-
-IMPORTANT: Match the established brand voice and incorporate relevant key phrases naturally.`;
-  }
-
-  // Add additional context if provided
-  if (additionalContext) {
-    prompt += `
-
-ADDITIONAL INSTRUCTIONS:
-${additionalContext}`;
-  }
-
-  // Add variant-specific instructions
-  prompt += `
-
-VARIANT INSTRUCTIONS:
-This is variant ${variantNumber} of 3. Make this version unique while maintaining the core message and quality.
-${variantNumber === 1 ? 'Focus on the educational/informative angle.' : ''}
-${variantNumber === 2 ? 'Focus on the practical application/benefits angle.' : ''}
-${variantNumber === 3 ? 'Focus on the inspirational/motivational angle.' : ''}
-
-REQUIREMENTS:
-- Content must be original and plagiarism-free
-- Include SEO-friendly headings and structure
-- Provide real value to the target audience
-- Match the specified tone exactly
-- Use clear, compelling language
-- End with a clear call-to-action
-- Word count should be approximately ${targetWordCount} words
-
-FORMAT RESPONSE:
-Return the content in the following JSON format:
-{
-  "title": "Compelling title for the content",
-  "content": "Full content in markdown format",
-  "targetKeywords": ["keyword1", "keyword2", "keyword3"],
-  "seoScore": 85
-}`;
+  let finalPrompt: string;
+  let finalSystemPrompt: string;
+  let synthesizedContext: SynthesizedContext | null = null;
 
   try {
+    // Try enhanced generation first
+    if (useEnhancedPrompts) {
+      console.log('🧠 [CONTENT GENERATOR] Attempting enhanced prompt generation...');
+
+      // Default context weights optimized for content generation
+      const defaultWeights: Partial<ContextWeighting> = {
+        businessOfferings: 0.25,
+        brandVoice: 0.25,
+        competitorIntelligence: 0.20,
+        culturalContext: 0.15,
+        location: 0.10,
+        marketPositioning: 0.05
+      };
+
+      const finalContextWeights = { ...defaultWeights, ...contextWeights };
+
+      // Build context sources for enhanced generation
+      const contextSources: ContextSources = {
+        businessOfferings: businessOfferings || {
+          services: businessType ? [{ name: businessType, category: 'primary' }] : [],
+          products: [],
+          specializations: [],
+          uniqueValueProps: [],
+          serviceAreas: location ? [location] : []
+        },
+        brandAnalysis: brandVoiceAnalysis || websiteAnalysisContext,
+        competitorIntelligence,
+        culturalPrompt: undefined,
+        culturalRequest: undefined,
+        culturalAnalysis: undefined,
+        location: detailedLocation?.fullDisplay || location,
+        businessType: businessType,
+        targetAudience: targetAudience,
+        contentAnalysis: websiteAnalysisContext,
+        tonePreference: tone,
+        additionalContext,
+        userTopic: topic,
+      };
+
+      // Try to synthesize context - wrap in try/catch to prevent failures
+      try {
+        synthesizedContext = synthesizeContext(contextSources, finalContextWeights);
+        console.log('✅ [CONTENT GENERATOR] Context synthesis successful');
+      } catch (contextError) {
+        console.warn('⚠️ [CONTENT GENERATOR] Context synthesis failed, using fallback:', contextError);
+        synthesizedContext = null;
+      }
+
+      // Generate enhanced prompts specifically for content generation
+      if (synthesizedContext) {
+        try {
+          const enhancedPrompts = generateContentSpecificPrompts(
+            topic,
+            contentType,
+            tone,
+            variantNumber,
+            synthesizedContext,
+            targetWordCount,
+            tags,
+            additionalContext
+          );
+
+          finalPrompt = enhancedPrompts.userPrompt;
+          finalSystemPrompt = enhancedPrompts.systemPrompt;
+          console.log('✅ [CONTENT GENERATOR] Enhanced prompts generated successfully');
+        } catch (promptError) {
+          console.warn('⚠️ [CONTENT GENERATOR] Enhanced prompt generation failed, using fallback:', promptError);
+          throw promptError; // This will be caught by outer try/catch
+        }
+      } else {
+        throw new Error('Context synthesis failed');
+      }
+    } else {
+      throw new Error('Enhanced prompts disabled');
+    }
+  } catch (enhancedError) {
+    console.log('🔄 [CONTENT GENERATOR] Falling back to legacy prompt generation:', enhancedError);
+
+    // Fallback to legacy prompt generation
+    try {
+      const legacyPrompt = generateLegacyPrompt(
+        topic,
+        contentType,
+        tone,
+        variantNumber,
+        targetWordCount,
+        {
+          businessType,
+          targetAudience,
+          location,
+          detailedLocation,
+          tags,
+          brandVoiceAnalysis,
+          websiteAnalysisContext,
+          additionalContext
+        }
+      );
+
+      finalPrompt = legacyPrompt.prompt;
+      finalSystemPrompt = 'You are an expert content generator. Generate high-quality, original content based on the user\'s requirements. Respond with valid JSON only when requested.';
+      console.log('✅ [CONTENT GENERATOR] Legacy prompts generated successfully');
+    } catch (legacyError) {
+      console.error('❌ [CONTENT GENERATOR] Even legacy prompt generation failed:', legacyError);
+
+      // Ultimate fallback - generate a simple prompt without any complex processing
+      const simplePromptResult = generateSimplePrompt(topic, contentType, tone, variantNumber, targetWordCount, businessType, targetAudience);
+      finalPrompt = simplePromptResult.prompt;
+      finalSystemPrompt = 'You are a professional content writer. Generate high-quality content based on the requirements.';
+      console.log('🔄 [CONTENT GENERATOR] Using ultimate simple fallback prompt');
+    }
+  }
+
+  try {
+    console.log('🤖 [CONTENT GENERATOR] Calling AI service...');
     const client = getLemonfoxClient();
     const response = await client.generateCompletion({
       model: 'lemonfox-70b',
-      prompt,
-      system_prompt: 'You are an expert content generator. Generate high-quality, original content based on the user\'s requirements. Respond with valid JSON only when requested.',
-      max_tokens: 2000,
+      prompt: finalPrompt,
+      system_prompt: finalSystemPrompt,
+      max_tokens: 2500, // Increased for richer content
       temperature: 0.7,
     });
 
     // Extract the content from the response
     const content = response.choices[0]?.message?.content || '';
+    console.log('✅ [CONTENT GENERATOR] AI response received:', {
+      contentLength: content.length,
+      hasContent: content.length > 0
+    });
+
+    if (!content || content.trim().length === 0) {
+      throw new Error('Empty response from AI service');
+    }
 
     // Parse the response
     let generatedData;
     try {
       // Try to parse as JSON first
       generatedData = JSON.parse(content);
+      console.log('✅ [CONTENT GENERATOR] Response parsed as JSON successfully');
     } catch (parseError) {
+      console.log('🔄 [CONTENT GENERATOR] JSON parse failed, parsing as text response:', parseError instanceof Error ? parseError.message : String(parseError));
       // If not JSON, try to extract content from text response
       generatedData = parseTextResponse(content, topic, contentType);
     }
@@ -292,6 +355,13 @@ Return the content in the following JSON format:
     // Calculate actual word count
     const wordCount = generatedContent.split(/\s+/).filter((word: string) => word.length > 0).length;
 
+    console.log('✅ [CONTENT GENERATOR] Content generation completed successfully:', {
+      title,
+      wordCount,
+      keywordsCount: targetKeywords.length,
+      seoScore
+    });
+
     return {
       title,
       content: generatedContent,
@@ -299,15 +369,57 @@ Return the content in the following JSON format:
       wordCount,
       targetKeywords,
       seoScore,
-      generationPrompt: prompt
+      generationPrompt: finalPrompt
     };
 
   } catch (error) {
-    console.error('Content generation error:', error);
+    console.error('❌ [CONTENT GENERATOR] Content generation error:', error);
 
     // Fallback content generation
-    return generateFallbackContent(options, prompt);
+    console.log('🔄 [CONTENT GENERATOR] Using fallback content generation');
+    return generateFallbackContent(options, finalPrompt);
   }
+}
+
+function generateSimplePrompt(
+  topic: string,
+  contentType: string,
+  tone: string,
+  variantNumber: number,
+  targetWordCount: number,
+  businessType?: string,
+  targetAudience?: string
+): { prompt: string } {
+  const contentTypeConfig = CONTENT_TYPE_PROMPTS[contentType as keyof typeof CONTENT_TYPE_PROMPTS];
+
+  let prompt = `Generate a ${contentType.replace('_', ' ')} about "${topic}".
+
+Content Type: ${contentType.replace('_', ' ').toUpperCase()}
+Target Word Count: ${targetWordCount} words
+Tone: ${tone}
+Variant: ${variantNumber} of 3
+${businessType ? `Business Type: ${businessType}` : ''}
+${targetAudience ? `Target Audience: ${targetAudience}` : ''}
+
+Content Structure:
+${contentTypeConfig.structure}
+
+Requirements:
+- Create original, engaging content
+- Match the specified tone exactly
+- Include practical value for the reader
+- End with a clear call-to-action
+- Word count should be approximately ${targetWordCount} words
+
+Please respond in this JSON format:
+{
+  "title": "Compelling title for the content",
+  "content": "Full content in markdown format",
+  "targetKeywords": ["keyword1", "keyword2", "keyword3"],
+  "seoScore": 85
+}`;
+
+  return { prompt };
 }
 
 function generateTitle(topic: string, contentType: string, tone: string): string {
@@ -412,6 +524,401 @@ function parseTextResponse(response: string, topic: string, contentType: string)
     targetKeywords: extractKeywords(content, []),
     seoScore: calculateSeoScore(content, [])
   };
+}
+
+// Enhanced content generation helper functions
+
+function competitiveDifferentiator(competitorIntelligence: any): string {
+  if (!competitorIntelligence?.competitors) {
+    return 'Quality service and customer satisfaction';
+  }
+
+  const competitorWeaknesses = competitorIntelligence.competitors.flatMap((comp: any) =>
+    comp.weaknesses || []
+  );
+
+  if (competitorWeaknesses.length > 0) {
+    return `Addressing common industry gaps: ${competitorWeaknesses.slice(0, 2).join(', ')}`;
+  }
+
+  return 'Superior quality and customer-focused approach';
+}
+
+function generateContentSpecificPrompts(
+  topic: string,
+  contentType: string,
+  tone: string,
+  variantNumber: number,
+  synthesizedContext: SynthesizedContext,
+  targetWordCount: number,
+  tags: string[],
+  additionalContext?: string
+): { systemPrompt: string; userPrompt: string } {
+  const contentTypeConfig = CONTENT_TYPE_PROMPTS[contentType as keyof typeof CONTENT_TYPE_PROMPTS];
+  const toneGuidelines = TONE_GUIDELINES[tone as keyof typeof TONE_GUIDELINES];
+  const { businessIdentity, competitiveStrategy, culturalContext, contentStrategy, userPreferences } = synthesizedContext;
+
+  const primaryLocation = businessIdentity.location || 'Global market';
+  const localReferenceSnippet = culturalContext.localReferences.length > 0
+    ? culturalContext.localReferences.slice(0, 3).join(', ')
+    : 'Reference recognizable neighborhoods, landmarks, or regional concerns for the audience';
+
+  const competitorAdvantages = competitiveStrategy.competitiveAdvantages.length > 0
+    ? competitiveStrategy.competitiveAdvantages.slice(0, 3).join(', ')
+    : 'Superior service quality, faster response, and trusted expertise';
+
+  const competitorThreats = competitiveStrategy.competitorThreats.length > 0
+    ? competitiveStrategy.competitorThreats.slice(0, 3).join(', ')
+    : 'Low-cost competitors and national chains';
+
+  const counterPositioning = competitiveStrategy.counterPositioning.length > 0
+    ? competitiveStrategy.counterPositioning.slice(0, 3).join(', ')
+    : 'Elevated customer experience, specialization, and bundled value';
+
+  const differentiationFocus = competitiveStrategy.strategicDifferentiation.length > 0
+    ? competitiveStrategy.strategicDifferentiation.slice(0, 3).join(', ')
+    : 'Premium craftsmanship, transparent pricing, and community involvement';
+
+  const userPreferenceSummary = `**USER PREFERENCE ALIGNMENT:**
+- Requested Tone: ${userPreferences.desiredTone}
+- Language Preference: ${userPreferences.languagePreference}
+- Formality Preference: ${userPreferences.formalityPreference}
+- Content Purpose: ${userPreferences.contentPurpose}
+${userPreferences.additionalContext ? `- Campaign Notes: ${userPreferences.additionalContext}` : '- Campaign Notes: Not provided; derive from context insights'}
+${userPreferences.competitorUrls.length > 0 ? `- Competitors to reference or counter: ${userPreferences.competitorUrls.join(', ')}` : '- Competitors to reference or counter: Use inferred intelligence'}`;
+
+  // Enhanced system prompt with deep context integration
+  const systemPrompt = `You are an elite content strategist and copywriter with expertise in creating highly personalized, contextually-aware content that drives engagement and conversions.
+
+**CORE COMPETENCIES:**
+- Deep brand voice integration and personality matching
+- Cultural and linguistic adaptation for global markets
+- SEO-optimized content creation with natural keyword integration
+- Competitive positioning and unique value proposition articulation
+- Audience-specific content personalization and value delivery
+
+**CONTEXT SYNTHESIS MASTERY:**
+You excel at weaving together multiple context sources into cohesive, compelling narratives:
+- Brand personality and communication style adaptation
+- Cultural nuance integration and localization
+- Competitive positioning and differentiation
+- Business offering expertise and service knowledge
+- Location-specific targeting and community connection
+
+**CONTENT EXCELLENCE STANDARDS:**
+- Create content that feels authentically from the specified brand
+- Integrate cultural context naturally without stereotyping
+- Position offerings strategically against competitive landscape
+- Match exact tone, personality, and communication preferences
+- Provide genuine value to the target audience
+- Optimize for search engines while maintaining readability
+
+${userPreferenceSummary}
+
+**REGIONAL & COMPETITOR INTELLIGENCE:**
+- Primary market focus: ${primaryLocation}
+- Local touchpoints to weave in: ${localReferenceSnippet}
+- Competitive advantages to amplify: ${competitorAdvantages}
+- Competitor threats to neutralize: ${competitorThreats}
+- Counter-positioning themes: ${counterPositioning}
+- Differentiation pillars: ${differentiationFocus}
+
+**GLOBAL & SCALABILITY DIRECTIVES:**
+- When location-specific, include insights that scale to broader regional or global audiences
+- Highlight how recommendations adapt for multi-location presence when relevant
+- Make reasoning explicit about whether guidance is local, regional, or global in scope
+
+**ADDITIONAL CONTEXT COMPLIANCE:**
+- Honor any extra campaign instructions exactly as provided
+- Avoid contradicting supplied competitive or localization insights
+
+**TECHNICAL REQUIREMENTS:**
+- Follow specified content structure precisely
+- Meet target word count within ±10%
+- Include SEO elements naturally (headings, keywords, meta elements)
+- Ensure content is original and plagiarism-free
+- Respond in valid JSON format when requested
+
+Generate content that demonstrates deep understanding of all context sources and creates authentic brand experiences.`;
+
+  // Enhanced user prompt with comprehensive context integration
+  let userPrompt = `**CONTENT GENERATION REQUEST**
+
+**TOPIC:** ${topic}
+**CONTENT TYPE:** ${contentType.replace('_', ' ').toUpperCase()}
+**TONE:** ${tone.toUpperCase()} (${toneGuidelines.voice})
+**TARGET WORD COUNT:** ${targetWordCount} words
+**VARIANT:** ${variantNumber} of 3
+
+---
+
+**🎯 SYNTHESIZED BRAND STRATEGY:**
+
+**Brand Identity & Voice:**
+**Primary Tone:** ${synthesizedContext.brandVoice.primaryTone}
+**Formality Level:** ${synthesizedContext.brandVoice.formalityLevel}
+**Language Style:** ${synthesizedContext.brandVoice.languageStyle}
+**Key Phrases:** ${synthesizedContext.brandVoice.keyPhrases.slice(0, 3).join(' • ')}
+**Core Values:** ${synthesizedContext.brandVoice.coreValues.slice(0, 3).join(' • ')}
+
+**Business Expertise:**
+**Business Type:** ${synthesizedContext.businessIdentity.type}
+**Primary Offerings:** ${synthesizedContext.businessIdentity.primaryOfferings.join(', ')}
+**Unique Value Props:** ${synthesizedContext.businessIdentity.uniqueValueProps.slice(0, 2).join('. ')}
+**Target Audience:** ${synthesizedContext.businessIdentity.targetAudience}
+
+**Strategic Positioning:**
+**Market Positioning:** ${synthesizedContext.competitiveStrategy.marketPositioning.slice(0, 2).join(' • ')}
+**Competitive Advantages:** ${synthesizedContext.competitiveStrategy.competitiveAdvantages.slice(0, 3).join(' • ')}
+**Strategic Differentiation:** ${synthesizedContext.competitiveStrategy.strategicDifferentiation.slice(0, 2).join(' • ')}
+
+---
+
+**🌍 CULTURAL & LOCALIZATION CONTEXT:**
+
+**Communication Style:** ${synthesizedContext.culturalContext.communicationStyle}
+**Cultural Nuances:** ${synthesizedContext.culturalContext.culturalNuances.slice(0, 3).join('; ')}
+**Language Guidelines:** ${synthesizedContext.culturalContext.languageGuidelines}
+**Formality Requirements:** ${synthesizedContext.culturalContext.formalityRequirements}
+**Local References:** ${synthesizedContext.culturalContext.localReferences.slice(0, 2).join(', ')}
+
+${synthesizedContext.businessIdentity.location ? `
+**Location Targeting:**
+**Primary Location:** ${synthesizedContext.businessIdentity.location}
+**Local Elements:** ${synthesizedContext.culturalContext.localReferences.slice(0, 2).join(' • ')}
+` : ''}
+
+---
+
+**📍 REGIONAL EXECUTION:**
+- Primary market focus: ${primaryLocation}
+- Integrate local cues like ${localReferenceSnippet}
+- Reference seasonal or regional priorities: ${contentStrategy.locationSpecificTopics.slice(0, 3).join(', ') || 'Tie messaging to recognizable local needs'}
+- Include hyperlocal variations (neighborhoods, ZIP codes, landmarks) alongside broader city coverage
+- Clearly label when guidance is local vs. regional vs. global
+
+**🌐 GLOBAL ALIGNMENT:**
+- Bridge ${primaryLocation === 'Global market' ? 'multi-region audiences' : `${primaryLocation} insights`} to wider audiences
+- Include at least one section or CTA that works for broader markets while respecting local nuance
+- If no explicit location, demonstrate how content adapts to different geographies in reasoning
+
+---
+
+**⚔️ COMPETITIVE INTELLIGENCE:**
+
+**Market Positioning:** ${synthesizedContext.competitiveStrategy.marketPositioning.slice(0, 2).join(', ')}
+**Content Gaps to Target:** ${synthesizedContext.competitiveStrategy.contentGapsToTarget.slice(0, 3).join(', ')}
+**Market Opportunities:** ${synthesizedContext.competitiveStrategy.marketOpportunities.slice(0, 2).join(' • ')}
+**Advantages to Amplify:** ${competitorAdvantages}
+**Threats to Counter:** ${competitorThreats}
+**Counter-Positioning Themes:** ${counterPositioning}
+
+---
+
+**👤 USER INPUT ALIGNMENT:**
+- Requested Tone: ${userPreferences.desiredTone}
+- Language Preference: ${userPreferences.languagePreference}
+- Formality Preference: ${userPreferences.formalityPreference}
+- Content Purpose: ${userPreferences.contentPurpose}
+${userPreferences.additionalContext ? `- Campaign Notes: ${userPreferences.additionalContext}` : '- Campaign Notes: Use context insights to infer messaging priorities'}
+${userPreferences.competitorUrls.length > 0 ? `- Competitors to reference/counter: ${userPreferences.competitorUrls.join(', ')}` : '- Competitors to reference/counter: Draw from competitive intelligence' }
+
+---
+
+**📝 CONTENT REQUIREMENTS:**
+
+**Content Structure:**
+${contentTypeConfig.structure}
+
+**Tone Implementation:**
+**Style Guidelines:** ${toneGuidelines.style}
+**Voice Characteristics:** ${toneGuidelines.voice}
+
+**SEO Integration:**
+**Target Keywords:** ${tags.join(', ')}
+**Strategic Keywords:** ${synthesizedContext.contentStrategy.strategicKeywords.slice(0, 5).join(', ')}
+**Service-Specific Topics:** ${synthesizedContext.contentStrategy.serviceSpecificTopics.slice(0, 3).join(', ')}
+
+**Variant Strategy:**
+This is VARIANT ${variantNumber}. Approach:
+${variantNumber === 1 ? '📚 **EDUCATIONAL FOCUS**: Emphasize expertise, share insights, and provide valuable knowledge that positions the brand as a thought leader.' : ''}
+${variantNumber === 2 ? '🎯 **PRACTICAL APPLICATION**: Focus on real-world benefits, specific use cases, and tangible outcomes that demonstrate value.' : ''}
+${variantNumber === 3 ? '🚀 **INSPIRATIONAL ANGLE**: Create emotional connection, showcase transformation possibilities, and motivate audience action.' : ''}
+
+---
+
+**🎨 CONTENT DIRECTIVES:**
+
+**Brand Voice Execution:**
+- Write exactly as this brand would communicate
+- Use their specific terminology and phrases naturally
+- Reflect their core values throughout the content
+- Match their preferred content structure and formatting
+
+**Cultural Integration:**
+- Apply cultural nuances authentically
+- Use appropriate formality and communication style
+- Incorporate localization elements naturally
+- Avoid cultural stereotypes or inappropriate references
+
+**Competitive Positioning:**
+- Highlight unique advantages over competitors
+- Address competitive gaps identified in the analysis
+- Emphasize differentiation opportunities
+- Position offerings as superior solutions
+
+**Location Targeting:**
+- Reference local context and community elements
+- Use geographic keywords naturally
+- Connect with local audience values and needs
+- Demonstrate understanding of local market
+- Mention local proof points (reviews, case studies, certifications) and community involvement when relevant
+- Incorporate "near me" or voice-search friendly phrasing without sounding forced
+- Call out opportunities to strengthen Google Business Profile, local citations, or map pack visibility
+
+**📣 LOCAL SEO IMPACT:**
+- Highlight how this content supports service-area expansion, neighborhood dominance, or regional authority
+- Suggest calls-to-action that drive in-market conversions (e.g., visit showroom, schedule local inspection, request neighborhood-specific quote)
+- Note any compliance or local regulation considerations that build trust
+
+---
+
+${additionalContext ? `**📌 CAMPAIGN CONTEXT:**
+${additionalContext}
+
+---
+
+` : ''}
+
+---
+
+**📋 QUALITY REQUIREMENTS:**
+- Original, plagiarism-free content
+- SEO-optimized with natural keyword integration
+- Compelling, value-driven content
+- Clear call-to-action appropriate for content type
+- Word count: ${targetWordCount} ±10%
+- Proper formatting with markdown structure
+
+**RESPONSE FORMAT:**
+Return in this JSON format:
+{
+  "title": "Compelling, brand-aligned title",
+  "content": "Full content in markdown format",
+  "targetKeywords": ["primary", "secondary", "tertiary"],
+  "seoScore": 85
+}`;
+
+  return { systemPrompt, userPrompt };
+}
+
+function generateLegacyPrompt(
+  topic: string,
+  contentType: string,
+  tone: string,
+  variantNumber: number,
+  targetWordCount: number,
+  legacyOptions: any
+): { prompt: string } {
+  const { businessType, targetAudience, location, detailedLocation, tags, brandVoiceAnalysis, websiteAnalysisContext, additionalContext } = legacyOptions;
+  const contentTypeConfig = CONTENT_TYPE_PROMPTS[contentType as keyof typeof CONTENT_TYPE_PROMPTS];
+  const toneGuidelines = TONE_GUIDELINES[tone as keyof typeof TONE_GUIDELINES];
+
+  let prompt = `Generate ${contentTypeConfig.instructions} for the following topic:
+
+TOPIC: ${topic}
+CONTENT TYPE: ${contentType.replace('_', ' ').toUpperCase()}
+TONE: ${tone.toUpperCase()} (${toneGuidelines.voice})
+TARGET WORD COUNT: ${targetWordCount} words
+VARIANT NUMBER: ${variantNumber} of 3
+
+BUSINESS CONTEXT:
+- Business Type: ${businessType || 'General business'}
+- Target Audience: ${targetAudience || 'General audience'}
+${detailedLocation ? `- Location: ${detailedLocation.fullDisplay}
+${detailedLocation.searchContext ? `- Location Context: ${detailedLocation.searchContext}` : ''}
+${detailedLocation.geographicContext ? `- Cultural Context: ${detailedLocation.geographicContext}` : ''}
+${detailedLocation.localizedDescription ? `- Local Description: ${detailedLocation.localizedDescription}` : ''}` : location ? `- Location: ${location}` : ''}
+- Target Keywords: ${tags?.join(', ') || ''}
+
+TONE GUIDELINES:
+Style: ${toneGuidelines.style}
+Voice: ${toneGuidelines.voice}
+
+CONTENT STRUCTURE:
+${contentTypeConfig.structure}`;
+
+  // Add brand voice context if available
+  if (brandVoiceAnalysis) {
+    const { brandVoiceProfile, personalizationRecommendations, targetLanguageStyle } = brandVoiceAnalysis;
+    prompt += `
+
+ENHANCED BRAND VOICE CONTEXT:
+**Brand Profile:** ${targetLanguageStyle}
+**Key Brand Phrases:** ${brandVoiceProfile.keyPhrases.slice(0, 8).join(', ')}
+**Unique Terminology:** ${brandVoiceProfile.uniqueTerminology.slice(0, 5).join(', ')}
+**Branded Terms:** ${brandVoiceProfile.brandedTerms.join(', ')}
+**Core Values:** ${brandVoiceProfile.coreValues.join(', ')}
+**Communication Style:** ${brandVoiceProfile.perspective} perspective, ${brandVoiceProfile.formalityLevel} formality
+
+**CONTENT CREATION REQUIREMENTS:**
+${personalizationRecommendations.contentCreation.map((rec: string) => `- ${rec}`).join('\n')}
+
+**BRAND CONSISTENCY REQUIREMENTS:**
+${personalizationRecommendations.brandConsistency.map((rec: string) => `- ${rec}`).join('\n')}
+
+IMPORTANT: Write content that sounds exactly like it comes from this business. Use their terminology, match their communication style, and reflect their core values naturally throughout the content.`;
+  }
+
+  // Add legacy website analysis context for backwards compatibility
+  if (websiteAnalysisContext && !brandVoiceAnalysis) {
+    prompt += `
+
+WEBSITE CONTEXT FOR BRAND CONSISTENCY:
+- Brand Voice: ${websiteAnalysisContext.brandVoice || 'Professional and trustworthy'}
+- Key Phrases: ${websiteAnalysisContext.keyPhrases?.join(', ') || 'N/A'}
+- Services: ${websiteAnalysisContext.services?.join(', ') || 'N/A'}
+- About Company: ${websiteAnalysisContext.aboutInfo || 'N/A'}
+
+IMPORTANT: Match the established brand voice and incorporate relevant key phrases naturally.`;
+  }
+
+  // Add additional context if provided
+  if (additionalContext) {
+    prompt += `
+
+ADDITIONAL INSTRUCTIONS:
+${additionalContext}`;
+  }
+
+  // Add variant-specific instructions
+  prompt += `
+
+VARIANT INSTRUCTIONS:
+This is variant ${variantNumber} of 3. Make this version unique while maintaining the core message and quality.
+${variantNumber === 1 ? 'Focus on the educational/informative angle.' : ''}
+${variantNumber === 2 ? 'Focus on the practical application/benefits angle.' : ''}
+${variantNumber === 3 ? 'Focus on the inspirational/motivational angle.' : ''}
+
+REQUIREMENTS:
+- Content must be original and plagiarism-free
+- Include SEO-friendly headings and structure
+- Provide real value to the target audience
+- Match the specified tone exactly
+- Use clear, compelling language
+- End with a clear call-to-action
+- Word count should be approximately ${targetWordCount} words
+
+FORMAT RESPONSE:
+Return the content in the following JSON format:
+{
+  "title": "Compelling title for the content",
+  "content": "Full content in markdown format",
+  "targetKeywords": ["keyword1", "keyword2", "keyword3"],
+  "seoScore": 85
+}`;
+
+  return { prompt };
 }
 
 function generateFallbackContent(options: ContentGenerationOptions, prompt: string): GeneratedContent {
